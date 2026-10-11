@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Design tokens — "Budget planner / Finance App" language:
+   warm off-white canvas, white cards with generous radii and soft shadows,
+   charcoal "ink" hero surfaces, amber CTA accent, periwinkle secondary and
+   pastel category tints.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  --bg: 246 247 249;        /* warm off-white canvas */
+  --surface: 255 255 255;   /* cards */
+  --surface-2: 242 243 246; /* insets / tracks */
+  --border: 233 235 239;
+  --text: 26 28 31;         /* near-black ink */
+  /* Secondary text. Was 122/128/138 (4.7:1) — legible by the letter of the
+     spec but it read as washed-out grey on every list and table. Darkened to
+     ~6.4:1 so meta lines, table headers and chip captions hold their weight. */
+  --muted: 95 101 112;
+  /* For the few places that need a lighter hint (placeholders, dividers). */
+  --muted-soft: 138 144 154;
+
+  /* Primary = ink (used for solid buttons, active states, focus rings). */
+  --accent: 30 32 38;
+  --accent-2: 46 49 58;
+
+  /* Signature accents */
+  --amber: 245 184 65;      /* CTA circles, progress fills */
+  --amber-2: 232 166 38;
+  --peri: 128 149 242;      /* secondary highlight band */
+  --peri-2: 104 126 232;
+
+  /* Pastel category tints */
+  --tint-mint: 226 241 234;
+  --tint-lilac: 238 234 248;
+  --tint-sky: 232 239 250;
+  --tint-blush: 250 236 234;
+  --tint-sand: 251 243 226;
+
+  --debit: 214 88 78;       /* muted terracotta */
+  --credit: 42 138 105;     /* muted forest */
+
+  /* Ink surfaces (sidebar, hero cards) */
+  --ink: 30 32 38;
+  --ink-2: 46 49 58;
+  --sidebar: 30 32 38;
+  --sidebar-fg: 240 241 243;
+  --sidebar-muted: 149 154 164;
+}
+
+html {
+  /* In-page nav (#features, #how, #faq) glides instead of jumping, and stops
+     clear of the sticky header rather than under it. */
+  scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem;
+}
+
+html,
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-sans), system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  padding-bottom: env(safe-area-inset-bottom);
+  /* Soft warm wash behind the canvas, as in the reference frames. */
+  background-image:
+    radial-gradient(60rem 40rem at 100% -10%, rgb(var(--tint-sand) / 0.75), transparent 60%),
+    radial-gradient(50rem 34rem at -10% 0%, rgb(var(--tint-sky) / 0.7), transparent 60%);
+  background-attachment: fixed;
+}
+
+h1, h2, h3 { letter-spacing: -0.022em; font-weight: 700; }
+
+.font-mono { font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tabular { font-variant-numeric: tabular-nums; }
+.scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Reusable component classes (no external deps). */
+@layer components {
+  .card { @apply rounded-3xl border border-border bg-surface shadow-card; }
+  .card-ink { @apply rounded-3xl bg-[rgb(var(--ink))] text-white shadow-ink; }
+
+  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-full text-sm font-semibold transition-all disabled:opacity-60 disabled:pointer-events-none; }
+  .btn-primary { @apply btn bg-accent px-5 py-2.5 text-white hover:bg-[rgb(var(--accent-2))] active:scale-[0.97]; }
+  .btn-accent { @apply btn bg-amber px-5 py-2.5 text-[rgb(var(--ink))] hover:bg-[rgb(var(--amber-2))] active:scale-[0.97]; }
+  .btn-outline { @apply btn border border-border bg-surface px-5 py-2.5 text-text hover:bg-surface-2 active:scale-[0.97]; }
+  .btn-ghost { @apply btn px-3.5 py-2 text-muted hover:bg-surface-2 hover:text-text; }
+
+  /* Round amber "go" affordance from the reference. */
+  .fab-amber { @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber text-[rgb(var(--ink))] transition-transform hover:scale-105 active:scale-95; }
+
+  .input { @apply w-full rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition-shadow focus:ring-2 focus:ring-accent/15 focus:border-[rgb(var(--text))]/25; }
+
+  /* Native selects paint their arrow inside the box's own padding, so on narrow
+     widths the label runs straight into it. Draw our own chevron and reserve
+     room for it instead. */
+  .select {
+    @apply input appearance-none bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%237A808A' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
+    background-position: right 0.85rem center;
+    background-size: 1rem 1rem;
+  }
+  .select::-ms-expand { display: none; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold; }
+
+  /* ── Headings ──────────────────────────────────────────────────────────
+     Page titles used to be pinned at 28px, which is a desktop size: on a
+     360px phone it ate the header row and pushed the action buttons into
+     the gutter. These scale with the viewport and settle at the old size
+     once there is room for it. */
+  .h-page { @apply text-[clamp(1.375rem,5.2vw,1.75rem)] font-extrabold tracking-tight; }
+  .h-section { @apply text-[clamp(1.0625rem,3.6vw,1.25rem)] font-extrabold tracking-tight; }
+  .tile { @apply grid place-items-center rounded-2xl; }
+
+  /* ── Surfaces ──────────────────────────────────────────────────────────
+     A page of identical white cards reads flat. These give a section a tinted
+     ground that still belongs to the palette. Colour comes from --tone-*,
+     which each usage sets inline from categoryStyle(). */
+  .card-tinted {
+    @apply relative overflow-hidden rounded-3xl border shadow-card;
+    background-color: var(--tone-soft, rgb(var(--surface)));
+    border-color: var(--tone-border, rgb(var(--border)));
+  }
+  /* Hero panel: a page's headline number on flat ink — no gradient. */
+  .card-hero {
+    @apply relative overflow-hidden rounded-3xl bg-[rgb(var(--ink))] text-white shadow-ink;
+  }
+
+  /* ── Badges ────────────────────────────────────────────────────────────
+     Tinted ground + darkened same-hue text, so a badge is legibly coloured
+     rather than pale-on-pale. Set --tone-soft / --tone-ink inline. */
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold leading-none;
+    background: var(--tone-soft, rgb(var(--surface-2)));
+    color: var(--tone-ink, rgb(var(--text)));
+    box-shadow: inset 0 0 0 1px var(--tone-border, transparent);
+  }
+  .badge-lg { @apply px-3 py-1.5 text-xs; }
+
+  /* ── Icon buttons ──────────────────────────────────────────────────────
+     Replaces bare "Edit"/"Delete" text links: a real hit target that shows
+     its intent on hover instead of a blue-ish word. */
+  .icon-btn {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-surface text-muted transition-all sm:h-8 sm:w-8;
+    @apply hover:-translate-y-px hover:text-text hover:border-[rgb(var(--text))]/25 hover:shadow-card active:translate-y-0 active:scale-95;
+  }
+  .icon-btn-danger { @apply icon-btn hover:border-transparent hover:bg-[rgb(var(--debit))] hover:text-white; }
+  .icon-btn-accent { @apply icon-btn hover:border-transparent hover:bg-[rgb(var(--ink))] hover:text-white; }
+
+  /* Pressable list row / option in a picker. */
+  .pick {
+    @apply flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-3 py-2.5 text-left text-sm transition-all;
+    @apply hover:-translate-y-0.5 hover:shadow-card;
+  }
+  .pick-on { @apply border-transparent text-white shadow-card; background: var(--tone-solid, rgb(var(--ink))); }
+}
+
+/* ── Landing page motion ────────────────────────────────────────────────── */
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes floatSlow { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-16px) rotate(-2deg); } }
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes growUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes growRight { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.animate-float { animation: float 5s ease-in-out infinite; }
+.animate-float-slow { animation: floatSlow 7s ease-in-out infinite; }
+.animate-marquee { animation: marquee 26s linear infinite; }
+.animate-grow { transform-origin: bottom; animation: growUp 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-grow-x { transform-origin: left; animation: growRight 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Headline sheen that sweeps once on load. */
+.sheen {
+  background: linear-gradient(100deg, rgb(var(--ink)) 30%, rgb(var(--amber-2)) 50%, rgb(var(--ink)) 70%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 3.5s ease-in-out 0.4s 1 both;
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { 0% { opacity: 0; transform: scale(0.94) translateY(6px); } 100% { opacity: 1; transform: none; } }
+@keyframes slideInLeft { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+
+.animate-fade-up { animation: fadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-fade-in { animation: fadeIn 0.5s ease both; }
+.animate-pop { animation: popIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-slide-in { animation: slideInLeft 0.4s ease both; }
+
+.lift { transition: transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease; }
+.lift:hover { transform: translateY(-3px); box-shadow: 0 20px 44px -22px rgb(26 28 31 / 0.28); }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up, .animate-fade-in, .animate-pop, .animate-slide-in,
+  .animate-float, .animate-float-slow, .animate-marquee, .animate-grow, .animate-grow-x, .sheen { animation: none; }
+  html { scroll-behavior: auto; }
+  .sheen { color: rgb(var(--ink)); }
+  .lift, .btn { transition: none; }
+  .lift:hover { transform: none; }
+}
+
+/* ── Phones ─────────────────────────────────────────────────────────────────
+   Two viewport rules that the desktop layout never exercises but that break
+   the app badly on a real handset.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* 1. Safari zooms the whole page in whenever a focused form control is under
+      16px, and it does not zoom back out. Every input here is text-sm (14px),
+      so tapping any field left the layout scaled up and scrolled sideways —
+      which is what "the buttons go off the screen" actually was. Only touch
+      devices need this; the selector outweighs the utility classes that set
+      the smaller size. Checkboxes and radios have no text to scale. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* 2. viewportFit: 'cover' (see layout.tsx) runs the page under the notch, so
+      a landscape phone puts the left gutter behind it. The body already pads
+      the bottom for the home indicator; these do the sides. */
+.px-safe {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+/* Bottom sheets: clear the home indicator, and never grow past the viewport —
+   an overlong form used to push its submit button off-screen with nothing to
+   scroll. */
+.sheet {
+  max-height: min(88vh, 100dvh - 1rem);
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

@@ -1,0 +1,254 @@
+// Spendwise data model — multi-user.
+// Each user owns their own emails, transactions, subscriptions, Gmail token and
+// sync/salary settings (scoped by user_id). The category taxonomy and the app's
+// Google/Anthropic credentials are global (shared). Postgres (Neon / Vercel).
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev; "rhel-openssl-3.0.x" for Vercel's serverless runtime.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A person using the app. Passwords are scrypt-hashed. Salary auto-credit
+/// settings live here (per-user).
+model User {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  salaryEnabled Boolean  @default(false) @map("salary_enabled")
+  salaryAmount  Decimal? @db.Decimal(12, 2) @map("salary_amount")
+  salaryDay     Int      @default(1) @map("salary_day")
+  // Extra bank alert sender addresses this user wants tracked (beyond the built-ins).
+  customSenders String[] @default([]) @map("custom_senders")
+  // Built-in sender addresses this user has switched off — excluded from the Gmail query.
+  disabledSenders String[] @default([]) @map("disabled_senders")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+/// Immutable append-only store of fetched Gmail messages (per user).
+model RawEmail {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @default(1) @map("user_id")
+  gmailMessageId String    @map("gmail_message_id") // dedupe key for ingestion
+  gmailThreadId  String?   @map("gmail_thread_id")
+  sender         String
+  subject        String
+  bodyText       String    @map("body_text")
+  bodyHtml       String?   @map("body_html")
+  receivedAt     DateTime  @map("received_at")
+  fetchedAt      DateTime  @default(now()) @map("fetched_at")
+  parseStatus    String    @default("pending") @map("parse_status")
+  parseError     String?   @map("parse_error")
+
+  transactions Transaction[]
+
+  @@unique([userId, gmailMessageId])
+  @@index([userId, parseStatus])
+  @@map("raw_emails")
+}
+
+model Transaction {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @default(1) @map("user_id")
+  rawEmailId     Int?      @map("raw_email_id")
+  source         String    @default("gmail")
+  amount         Decimal   @db.Decimal(12, 2)
+  direction      String
+  occurredAt     DateTime  @map("occurred_at")
+  rawMerchant    String    @map("raw_merchant")
+  merchant       String
+  accountLast4   String?   @map("account_last4")
+  instrument     String    @default("unknown")
+  referenceId    String?   @map("reference_id")
+  categoryId     Int?      @map("category_id")
+  subcategoryId  Int?      @map("subcategory_id")
+  categoryLocked Boolean   @default(false) @map("category_locked")
+  categorySource String    @default("unassigned") @map("category_source")
+  displayLabel   String?   @map("display_label")
+  llmConfidence  Float?    @map("llm_confidence")
+  isRecurring    Boolean   @default(false) @map("is_recurring")
+  /// Charged to a credit card rather than the bank account. Credit-card spend
+  /// counts towards total spend but never reduces the account balance — the
+  /// bill payment itself is the account outflow (and is a Transfer, not spend).
+  isCreditCard   Boolean   @default(false) @map("is_credit_card")
+  subscriptionId Int?      @map("subscription_id")
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  rawEmail     RawEmail?     @relation(fields: [rawEmailId], references: [id])
+  category     Category?     @relation("TxnCategory", fields: [categoryId], references: [id])
+  subcategory  Category?     @relation("TxnSubcategory", fields: [subcategoryId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  /// One raw email yields at most one transaction. Postgres treats NULLs as
+  /// distinct, so manually-added rows (raw_email_id NULL) are unaffected.
+  /// Optional hardening: the app stays correct without it (parsePass checks
+  /// first, and dedupe sweeps every sync), so an unmigrated database still
+  /// behaves — it just loses the last-resort guarantee.
+  @@unique([userId, rawEmailId])
+  @@index([userId, occurredAt, amount])
+  @@index([userId, merchant])
+  @@index([userId, categoryId])
+  @@map("transactions")
+}
+
+/// Tombstone for a transaction the user deleted. Sync + parse re-run over the
+/// same mailbox constantly, and one purchase can arrive as several emails, so
+/// deleting a row is not enough — without this the next parse pass would
+/// recreate it from a sibling alert. Matched on the same fingerprint the
+/// deduper uses (amount + direction + ±3min + last4).
+model DeletedTransaction {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  amount       Decimal  @db.Decimal(12, 2)
+  direction    String
+  occurredAt   DateTime @map("occurred_at")
+  accountLast4 String?  @map("account_last4")
+  merchant     String
+  referenceId  String?  @map("reference_id")
+  /// Full row as it was, so "restore" puts back exactly what was removed.
+  snapshot     Json
+  deletedAt    DateTime @default(now()) @map("deleted_at")
+
+  @@index([userId, occurredAt, amount])
+  @@map("deleted_transactions")
+}
+
+/// Global category taxonomy (shared across users).
+/// A credit card the user owns, identified by the last 4 digits that appear in
+/// card alert emails. Registering a card retro-flags matching transactions.
+model CreditCard {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  last4     String
+  label     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, last4])
+  @@map("credit_cards")
+}
+
+model Category {
+  id        Int     @id @default(autoincrement())
+  name      String
+  parentId  Int?    @map("parent_id")
+  isExpense Boolean @map("is_expense")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  parent        Category?     @relation("CategoryTree", fields: [parentId], references: [id])
+  children      Category[]    @relation("CategoryTree")
+  txnsAsCat     Transaction[] @relation("TxnCategory")
+  txnsAsSub     Transaction[] @relation("TxnSubcategory")
+  rulesAsCat    MerchantRule[] @relation("RuleCategory")
+  rulesAsSub    MerchantRule[] @relation("RuleSubcategory")
+  budgets       Budget[]
+
+  @@unique([name, parentId])
+  @@index([parentId])
+  @@map("categories")
+}
+
+/// Merchant → category rules. userId null = global seed default (applies to all
+/// users); userId set = that user's learned/manual rule.
+model MerchantRule {
+  id            Int      @id @default(autoincrement())
+  userId        Int?     @map("user_id")
+  pattern       String
+  categoryId    Int      @map("category_id")
+  subcategoryId Int?     @map("subcategory_id")
+  label         String?
+  priority      Int      @default(0)
+  source        String   @default("manual")
+  createdAt     DateTime @default(now()) @map("created_at")
+  hitCount      Int      @default(0) @map("hit_count")
+
+  category    Category  @relation("RuleCategory", fields: [categoryId], references: [id])
+  subcategory Category? @relation("RuleSubcategory", fields: [subcategoryId], references: [id])
+
+  @@index([userId])
+  @@index([pattern])
+  @@map("merchant_rules")
+}
+
+model Subscription {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @default(1) @map("user_id")
+  merchant      String
+  medianAmount  Decimal  @db.Decimal(12, 2) @map("median_amount")
+  intervalDays  Int      @map("interval_days")
+  cadence       String
+  firstSeen     DateTime @map("first_seen") @db.Date
+  lastCharged   DateTime @map("last_charged") @db.Date
+  nextExpected  DateTime @map("next_expected") @db.Date
+  status        String   @default("active")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  transactions Transaction[]
+
+  @@unique([userId, merchant])
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+/// Per-user ingestion position.
+model SyncState {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @unique @default(1) @map("user_id")
+  lastHistoryId  String?   @map("last_history_id")
+  lastSyncAt     DateTime? @map("last_sync_at")
+  lastSyncStatus String?   @map("last_sync_status")
+
+  @@map("sync_state")
+}
+
+/// Global app configuration (Google OAuth app creds + Anthropic key), set once
+/// by whoever hosts. Shared across all users.
+model AppSetting {
+  id                 Int      @id @default(1)
+  googleClientId     String?  @map("google_client_id")
+  googleClientSecret String?  @map("google_client_secret")
+  googleRedirectUri  String?  @map("google_redirect_uri")
+  anthropicApiKey    String?  @map("anthropic_api_key")
+  anthropicModel     String?  @map("anthropic_model")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
+
+/// Per-user monthly budget for a category (spend cap).
+model Budget {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  categoryId Int      @map("category_id")
+  amount     Decimal  @db.Decimal(12, 2)
+  period     String   @default("monthly") // monthly
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, categoryId, period])
+  @@index([userId])
+  @@map("budgets")
+}
+
+/// Per-user Gmail OAuth token.
+model GmailToken {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique @default(1) @map("user_id")
+  accessToken  String?  @map("access_token")
+  refreshToken String?  @map("refresh_token")
+  expiryDate   BigInt?  @map("expiry_date")
+  scope        String?
+  tokenType    String?  @map("token_type")
+  emailAddress String?  @map("email_address")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("gmail_tokens")
+}

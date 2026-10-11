@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "autoPort": true,
+  "configurations": [
+    {
+      "name": "spendwise",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "spendwise-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:alt"
+      ],
+      "port": 3001,
+      "autoPort": true
+    }
+  ]
+}
