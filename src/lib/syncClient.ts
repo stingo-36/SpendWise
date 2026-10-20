@@ -21,8 +21,15 @@ let inFlight: Promise<SyncResponse> | null = null;
 export function runSync(): Promise<SyncResponse> {
   if (inFlight) return inFlight;
   inFlight = (async () => {
-    const res = await fetch('/api/sync', { method: 'POST' });
-    return (await res.json()) as SyncResponse;
+    const res = await fetch('/api/sync', { method: 'POST' }).catch(() => null);
+    if (!res) return { ok: false, error: 'Couldn’t reach SpendWise. Check your connection and try again.' };
+    // A crash or timeout on the host returns a plain-text error page, not JSON.
+    const data = (await res.json().catch(() => null)) as SyncResponse | null;
+    if (data) return data;
+    return {
+      ok: false,
+      error: res.status === 504 ? 'Sync took too long and was stopped. Try again — it picks up where it left off.' : `Sync failed on the server (${res.status}). Try again in a minute.`,
+    };
   })().finally(() => {
     inFlight = null;
   });
