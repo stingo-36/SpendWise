@@ -22,7 +22,8 @@
     "reset-data": "tsx scripts/reset-data.ts",
     "dev:alt": "NEXT_DIST_DIR=.next-alt next dev",
     "renormalize": "tsx scripts/renormalize-merchants.ts",
-    "dedupe": "tsx scripts/dedupe-transactions.ts"
+    "dedupe": "tsx scripts/dedupe-transactions.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -13,6 +13,8 @@ export interface MobileSummary {
   deltaPct: number | null;
   /** Sum of the user's monthly budgets; null when none are set. */
   budget: number | null;
+  /** Spend in the budgeted categories only — what `budget` is measured against. */
+  budgetSpent: number;
   /** Spend today (IST). Only meaningful when `month` is the current month. */
   todaySpend: number;
   categories: { name: string; amount: number; budget: number | null }[];
@@ -70,6 +72,7 @@ export async function getMobileSummary(userId: number, month: string): Promise<M
     prevMonthSpend: overview.prevMonthSpend,
     deltaPct: overview.deltaPct,
     budget: budgets.length ? round(budgetTotal) : null,
+    budgetSpent: round(budgets.reduce((sum, b) => sum + b.spent, 0)),
     todaySpend: round(todaySpend),
     categories: overview.categoryBreakdown.map((c) => ({
       name: c.categoryName,
