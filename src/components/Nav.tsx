@@ -34,6 +34,13 @@ export default function Nav() {
   }, []);
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
+  // The admin account has no spending of its own, so any other page is empty
+  // for it — e.g. after login sent it back to ?next=/dashboard.
+  useEffect(() => {
+    if (isAdmin && !ADMIN_LINKS.some((l) => isActive(l.href))) router.replace('/admin');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, pathname]);
+
   // Close the drawer whenever the route changes.
   useEffect(() => {
     setOpen(false);
