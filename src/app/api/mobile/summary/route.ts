@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { verifyMobileToken } from '@/lib/auth';
+import { prisma } from '@/lib/db';
 import { currentMonth } from '@/lib/reporting';
 import { getMobileSummary } from '@/lib/mobileSummary';
 import { bearer, mobileJson, preflight } from '@/lib/mobileApi';
@@ -13,6 +14,15 @@ export async function GET(req: NextRequest) {
 
   const month = req.nextUrl.searchParams.get('month') || currentMonth();
   if (!/^\d{4}-\d{2}$/.test(month)) return mobileJson({ error: 'month must be YYYY-MM' }, 400);
+
+  // "Last seen in Pulse" for the admin console, written at most every 10 min.
+  const now = new Date();
+  prisma.user
+    .updateMany({
+      where: { id: userId, OR: [{ pulseLastSeenAt: null }, { pulseLastSeenAt: { lt: new Date(now.getTime() - 10 * 60_000) } }] },
+      data: { pulseLastSeenAt: now },
+    })
+    .catch(() => {});
 
   try {
     return mobileJson(await getMobileSummary(userId, month));

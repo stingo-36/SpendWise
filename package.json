@@ -24,7 +24,8 @@
     "renormalize": "tsx scripts/renormalize-merchants.ts",
     "dedupe": "tsx scripts/dedupe-transactions.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "seed:admin": "tsx scripts/create-admin.ts"
+    "seed:admin": "tsx scripts/create-admin.ts",
+    "db:admin-columns": "prisma db execute --file prisma/sql/2026-10-20-admin-columns.sql --schema prisma/schema.prisma"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
