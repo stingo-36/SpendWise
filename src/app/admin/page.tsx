@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { inr, fmtDate, fmtDateTime } from '@/lib/format';
 import Icon from '@/components/Icon';
 import PasswordField from '@/components/PasswordField';
@@ -74,10 +74,92 @@ function Pulse({ u }: { u: AdminUser }) {
   // Pulse never tells us it disconnected, so a long silence reads as idle, not connected.
   const idle = Date.now() - new Date(seen).getTime() > 30 * 86_400_000;
   return (
-    <span className="inline-flex items-center gap-1.5" title={`Last opened ${fmtDateTime(seen)}`}>
-      <span className={`h-2 w-2 shrink-0 rounded-full ${idle ? 'bg-muted-soft' : 'bg-credit'}`} aria-hidden />
-      <span className="whitespace-nowrap">{idle ? 'Idle' : 'Connected'} · {ago(seen)}</span>
+    <span className="inline-flex items-start gap-1.5" title={`Last opened ${fmtDateTime(seen)}`}>
+      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${idle ? 'bg-muted-soft' : 'bg-credit'}`} aria-hidden />
+      <span className="leading-tight">
+        <span className="block">{idle ? 'Idle' : 'Connected'}</span>
+        <span className="block whitespace-nowrap text-xs text-muted-soft">{ago(seen)}</span>
+      </span>
     </span>
+  );
+}
+
+interface PipelineStatus {
+  llmConfigured: boolean;
+  counts: { rawEmails: number; pending: number; unparsed: number; transactions: number; reviewQueue: number };
+  lastSyncAt: string | null;
+  lastSyncStatus: string | null;
+}
+
+/** What each step does, in plain words, shown under its button. */
+const STEPS: { step: string; label: string; icon: string; help: (s: PipelineStatus | null) => string }[] = [
+  { step: 'sync', label: 'Sync', icon: 'repeat', help: () => 'Runs everything in one go: pulls new bank alert emails from this account’s Gmail, turns them into transactions and puts them in categories. Same as the user’s Sync now button and the daily sync.' },
+  { step: 'parse', label: 'Parse pending', icon: 'review', help: (s) => `Reads bank emails that are already downloaded but not yet turned into transactions.${s ? ` ${s.counts.pending} waiting.` : ''}` },
+  { step: 'categorize', label: 'Categorize', icon: 'keywords', help: (s) => `Puts uncategorised transactions into categories, first with keyword rules, then AI for anything left. AI is ${s?.llmConfigured ? 'on' : 'off — add an Anthropic key in App settings to turn it on'}.` },
+  { step: 'subscriptions', label: 'Detect subscriptions', icon: 'subscriptions', help: () => 'Looks for repeating payments, like Netflix every month, and adds them to the user’s Subscriptions page.' },
+  { step: 'dedupe', label: 'Remove duplicates', icon: 'transactions', help: () => 'Merges the same payment recorded twice, for example when both an email and an SMS arrived for it.' },
+];
+
+/** One account's pipeline: its counts, and each step as a button with what it does. */
+function PipelinePanel({ u, onRan }: { u: AdminUser; onRan: () => void }) {
+  const [status, setStatus] = useState<PipelineStatus | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<{ step: string; ok: boolean; summary: string } | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/admin/users/${u.id}/pipeline`).then((r) => (r.ok ? r.json() : null)).then(setStatus).catch(() => {});
+  }, [u.id]);
+
+  async function run(step: string) {
+    setBusy(step);
+    setResult(null);
+    const res = await fetch(`/api/admin/users/${u.id}/pipeline`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step }),
+    });
+    const d = await res.json().catch(() => ({ ok: false, summary: `Failed (${res.status})` }));
+    setBusy(null);
+    setResult({ step, ok: !!d.ok, summary: d.summary });
+    if (d.status) setStatus(d.status);
+    onRan();
+  }
+
+  const c = status?.counts;
+  const stats: [string, number | string | undefined][] = [
+    ['Raw emails', c?.rawEmails], ['Pending parse', c?.pending], ['Unparsed', c?.unparsed],
+    ['Transactions', c?.transactions], ['Review queue', c?.reviewQueue], ['AI categorising', status ? (status.llmConfigured ? 'On' : 'Off') : undefined],
+  ];
+
+  return (
+    <div className="space-y-3 rounded-3xl bg-surface-2/70 p-3 sm:p-4">
+      <div className="grid grid-cols-2 gap-2 xs:grid-cols-3 xl:grid-cols-6">
+        {stats.map(([label, value]) => (
+          <div key={label} className="rounded-2xl bg-surface px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</div>
+            <div className="font-bold tabular">{value ?? '–'}</div>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted">
+        {status?.lastSyncAt ? `Last sync ${fmtDateTime(status.lastSyncAt)} — ${status.lastSyncStatus ?? ''}` : status ? 'Never synced' : 'Loading…'}
+      </p>
+      <ul className="grid gap-2 xl:grid-cols-2">
+        {STEPS.map((s) => (
+          <li key={s.step} className="flex items-start gap-3 rounded-2xl bg-surface p-3">
+            <button onClick={() => run(s.step)} disabled={busy != null} className="btn-primary shrink-0 whitespace-nowrap px-3.5 py-2 text-xs">
+              <Icon name={s.icon} size={14} /> {busy === s.step ? 'Running…' : s.label}
+            </button>
+            <div className="min-w-0 text-xs leading-relaxed text-muted">
+              {s.help(status)}
+              {result?.step === s.step && (
+                <div role="status" className={`mt-1.5 font-semibold ${result.ok ? 'text-credit' : 'text-debit'}`}>{result.summary}</div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -163,6 +245,8 @@ export default function AdminPage() {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('newest');
   const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [pipelineFor, setPipelineFor] = useState<number | null>(null);
+  const togglePipeline = (id: number) => setPipelineFor((cur) => (cur === id ? null : id));
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -300,43 +384,56 @@ export default function AdminPage() {
         {/* Desktop: table */}
         {users.length > 0 && (
           <div className="scroll-x hidden xl:block">
-            <table className="w-full min-w-[980px] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="whitespace-nowrap text-left text-[11px] font-semibold uppercase tracking-wide text-muted">
                   <th className="px-5 py-3">Account</th>
-                  <th className="px-3 py-3">Joined</th>
-                  <th className="px-3 py-3 text-right">Transactions</th>
-                  <th className="px-3 py-3 text-right">Spent in {month}</th>
-                  <th className="px-3 py-3">Gmail</th>
-                  <th className="px-3 py-3">Pulse</th>
-                  <th className="px-3 py-3">Last activity</th>
-                  <th className="px-5 py-3"><span className="sr-only">Actions</span></th>
+                  <th className="px-2.5 py-3">Joined</th>
+                  <th className="px-2.5 py-3 text-right">Spent · {month.slice(0, 3)}</th>
+                  <th className="px-2.5 py-3">Gmail</th>
+                  <th className="px-2.5 py-3">Pulse</th>
+                  <th className="px-2.5 py-3">Last activity</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.id} className="border-t border-border transition-colors hover:bg-surface-2/60">
+                  <Fragment key={u.id}>
+                  <tr className="border-t border-border transition-colors hover:bg-surface-2/60">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <Avatar u={u} />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2"><span className="truncate font-semibold">{u.email}</span><Badges u={u} /></div>
-                          <div className="text-xs text-muted">ID {u.id}{u.budgets ? ` · ${u.budgets} budgets` : ''}</div>
+                          <div className="text-xs text-muted">ID {u.id} · {u.transactions.toLocaleString('en-IN')} transactions{u.budgets ? ` · ${u.budgets} budgets` : ''}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-muted">{fmtDate(u.createdAt)}</td>
-                    <td className="px-3 py-3 text-right font-semibold tabular">{u.transactions.toLocaleString('en-IN')}</td>
-                    <td className="px-3 py-3 text-right font-semibold tabular">{u.monthSpend ? inr(u.monthSpend) : <span className="text-muted-soft">–</span>}</td>
-                    <td className="max-w-[220px] px-3 py-3 text-muted"><Gmail u={u} /></td>
-                    <td className="px-3 py-3 text-muted"><Pulse u={u} /></td>
-                    <td className="whitespace-nowrap px-3 py-3 text-muted" title={u.lastActivityAt ? fmtDateTime(u.lastActivityAt) : undefined}>{ago(u.lastActivityAt)}</td>
+                    <td className="whitespace-nowrap px-2.5 py-3 text-muted">{fmtDate(u.createdAt)}</td>
+                    <td className="px-2.5 py-3 text-right font-semibold tabular">{u.monthSpend ? inr(u.monthSpend) : <span className="text-muted-soft">–</span>}</td>
+                    <td className="max-w-[170px] px-2.5 py-3 text-muted"><Gmail u={u} /></td>
+                    <td className="px-2.5 py-3 text-muted"><Pulse u={u} /></td>
+                    <td className="whitespace-nowrap px-2.5 py-3 text-muted" title={u.lastActivityAt ? fmtDateTime(u.lastActivityAt) : undefined}>{ago(u.lastActivityAt)}</td>
                     <td className="px-5 py-3 text-right">
-                      <button onClick={() => setEditing(u)} className="btn-outline whitespace-nowrap px-3 py-1.5 text-xs" aria-label={`Edit ${u.email}`}>
-                        <Icon name="edit" size={13} /> Edit
-                      </button>
+                      <div className="flex justify-end gap-1.5">
+                        <button onClick={() => togglePipeline(u.id)} aria-expanded={pipelineFor === u.id} className={`whitespace-nowrap px-3 py-1.5 text-xs ${pipelineFor === u.id ? 'btn-primary' : 'btn-outline'}`}>
+                          <Icon name="parsers" size={13} /> Pipeline
+                        </button>
+                        <button onClick={() => setEditing(u)} className="btn-outline whitespace-nowrap px-3 py-1.5 text-xs" aria-label={`Edit ${u.email}`}>
+                          <Icon name="edit" size={13} /> Edit
+                        </button>
+                      </div>
                     </td>
                   </tr>
+                  {pipelineFor === u.id && (
+                    <tr>
+                      <td colSpan={7} className="px-5 pb-4">
+                        {/* w-0 min-w-full: fill the row without letting the help text widen the table. */}
+                        <div className="w-0 min-w-full"><PipelinePanel u={u} onRan={load} /></div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -362,6 +459,10 @@ export default function AdminPage() {
                 <div className="col-span-2 rounded-2xl bg-surface-2 px-3 py-2 text-muted"><dt className="text-[11px] font-semibold uppercase tracking-wide">Gmail</dt><dd className="min-w-0 text-text"><Gmail u={u} /></dd></div>
                 <div className="col-span-2 rounded-2xl bg-surface-2 px-3 py-2 text-muted"><dt className="text-[11px] font-semibold uppercase tracking-wide">Pulse</dt><dd className="min-w-0 text-text"><Pulse u={u} /></dd></div>
               </dl>
+              <button onClick={() => togglePipeline(u.id)} aria-expanded={pipelineFor === u.id} className={`w-full py-2 text-xs ${pipelineFor === u.id ? 'btn-primary' : 'btn-outline'}`}>
+                <Icon name="parsers" size={13} /> {pipelineFor === u.id ? 'Hide pipeline' : 'Pipeline'}
+              </button>
+              {pipelineFor === u.id && <PipelinePanel u={u} onRan={load} />}
             </li>
           ))}
         </ul>

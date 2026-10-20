@@ -102,7 +102,7 @@ async function onInvalidGrant(userId: number): Promise<never> {
 async function authorizedClient(userId: number): Promise<OAuth2Client> {
   const stored = await prisma.gmailToken.findUnique({ where: { userId } });
   if (!stored?.refreshToken) {
-    throw new Error('Gmail not connected — visit /api/auth/google to authorize');
+    throw new GmailAuthError('Gmail isn’t connected yet. Connect it in Settings to fetch new transactions.');
   }
   const client = await oauthClient();
   client.setCredentials({
