@@ -299,7 +299,7 @@ export default function AdminPage() {
 
         {/* Desktop: table */}
         {users.length > 0 && (
-          <div className="scroll-x hidden lg:block">
+          <div className="scroll-x hidden xl:block">
             <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="whitespace-nowrap text-left text-[11px] font-semibold uppercase tracking-wide text-muted">
@@ -343,10 +343,10 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Phone and tablet: cards */}
-        <ul className="divide-y divide-border lg:hidden">
+        {/* Below 1280px: cards (two columns from tablet width) */}
+        <ul className="-mb-px grid md:grid-cols-2 xl:hidden [&>li]:border-b [&>li]:border-border md:[&>li:nth-child(odd)]:border-r">
           {users.map((u) => (
-            <li key={u.id} className="space-y-3 px-4 py-4 sm:px-5">
+            <li key={u.id} className="space-y-3 bg-surface px-4 py-4 sm:px-5">
               <div className="flex items-center gap-3">
                 <Avatar u={u} />
                 <div className="min-w-0 flex-1">
