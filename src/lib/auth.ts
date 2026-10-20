@@ -47,15 +47,35 @@ export async function createIngestToken(userId: number): Promise<string> {
 
 /** Verify an ingest token and return the userId, or null. */
 export async function verifyIngestToken(value: string | undefined | null): Promise<number | null> {
+  return verifyScopedToken('sms-ingest', value);
+}
+
+/**
+ * Per-user read-only token for the Pulse mobile app's spending summary.
+ *
+ * Same derivation as the ingest token under its own prefix, so it can read
+ * the summary and nothing else: it is not a session (no access to the rest of
+ * the API) and not an ingest token (cannot write).
+ */
+export async function createMobileToken(userId: number): Promise<string> {
+  return `${userId}.${await hmac(`mobile-read:${userId}`)}`;
+}
+
+/** Verify a mobile read token and return the userId, or null. */
+export async function verifyMobileToken(value: string | undefined | null): Promise<number | null> {
+  return verifyScopedToken('mobile-read', value);
+}
+
+async function verifyScopedToken(scope: string, value: string | undefined | null): Promise<number | null> {
   if (!value) return null;
   const dot = value.lastIndexOf('.');
   if (dot <= 0) return null;
   const id = value.slice(0, dot);
   const n = Number(id);
   if (!Number.isInteger(n)) return null;
-  const expected = await hmac(`sms-ingest:${n}`);
+  const expected = await hmac(`${scope}:${n}`);
   const got = value.slice(dot + 1);
-  // Constant-time: this token is guessed against over the network, unlike a
+  // Constant-time: these tokens are guessed against over the network, unlike a
   // session cookie the caller already holds.
   if (got.length !== expected.length) return null;
   let diff = 0;
