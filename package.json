@@ -29,6 +29,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
+    "@neon/config": "^1.8.6",
+    "@neon/env": "^1.5.3",
     "@prisma/client": "^6.1.0",
     "date-fns": "^4.1.0",
     "googleapis": "^144.0.0",
