@@ -28,6 +28,11 @@ export async function POST(req: NextRequest) {
     return mobileJson({ error: 'Invalid email or password' }, 401);
   }
 
+  // Shown as "Pulse connected" in the admin console. Best effort: linking
+  // must not fail just because this bookkeeping did.
+  const now = new Date();
+  await prisma.user.update({ where: { id: user.id }, data: { pulseConnectedAt: now, pulseLastSeenAt: now } }).catch(() => {});
+
   return mobileJson({ token: await createMobileToken(user.id), email: user.email });
 }
 

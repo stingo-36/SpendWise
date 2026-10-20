@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { isAdminEmail, requireAdmin } from '@/lib/admin';
+import { isAdminUser, requireAdmin } from '@/lib/admin';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +14,10 @@ export async function GET(req: NextRequest) {
   const weekAgo = new Date(now.getTime() - 7 * 86_400_000);
 
   const [users, txnStats, monthDebits, recentTxn, gmail, syncs, budgets, cats] = await Promise.all([
-    prisma.user.findMany({ select: { id: true, email: true, createdAt: true }, orderBy: { createdAt: 'desc' } }),
+    prisma.user.findMany({
+      select: { id: true, email: true, createdAt: true, isAdmin: true, pulseConnectedAt: true, pulseLastSeenAt: true },
+      orderBy: { createdAt: 'desc' },
+    }),
     prisma.transaction.groupBy({ by: ['userId'], _count: { _all: true }, _max: { occurredAt: true, createdAt: true } }),
     prisma.transaction.groupBy({ by: ['userId', 'categoryId', 'subcategoryId'], where: { direction: 'debit', occurredAt: { gte: monthStart } }, _sum: { amount: true } }),
     prisma.transaction.groupBy({ by: ['userId'], where: { createdAt: { gte: weekAgo } }, _count: { _all: true } }),
@@ -42,7 +45,7 @@ export async function GET(req: NextRequest) {
     return {
       id: u.id,
       email: u.email,
-      isAdmin: isAdminEmail(u.email),
+      isAdmin: isAdminUser(u),
       createdAt: u.createdAt.toISOString(),
       transactions: st?._count._all ?? 0,
       lastTransactionAt: st?._max.occurredAt?.toISOString() ?? null,
@@ -52,6 +55,8 @@ export async function GET(req: NextRequest) {
       lastSyncStatus: sy?.lastSyncStatus ?? null,
       budgets: bud.get(u.id)?._count._all ?? 0,
       activeThisWeek: (recent.get(u.id)?._count._all ?? 0) > 0,
+      pulseConnectedAt: u.pulseConnectedAt?.toISOString() ?? null,
+      pulseLastSeenAt: u.pulseLastSeenAt?.toISOString() ?? null,
     };
   });
 
@@ -62,6 +67,7 @@ export async function GET(req: NextRequest) {
       activeThisWeek: rows.filter((r) => r.activeThisWeek).length,
       transactions: rows.reduce((s, r) => s + r.transactions, 0),
       gmailConnected: rows.filter((r) => r.gmail).length,
+      pulseConnected: rows.filter((r) => r.pulseConnectedAt).length,
     },
     users: rows,
   });

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { inr, fmtDate, fmtDateTime } from '@/lib/format';
 import Icon from '@/components/Icon';
+import PasswordField from '@/components/PasswordField';
 
 interface AdminUser {
   id: number;
@@ -17,8 +18,10 @@ interface AdminUser {
   lastSyncStatus: string | null;
   budgets: number;
   activeThisWeek: boolean;
+  pulseConnectedAt: string | null;
+  pulseLastSeenAt: string | null;
 }
-interface Totals { users: number; newThisMonth: number; activeThisWeek: number; transactions: number; gmailConnected: number }
+interface Totals { users: number; newThisMonth: number; activeThisWeek: number; transactions: number; gmailConnected: number; pulseConnected: number }
 
 type Sort = 'newest' | 'active' | 'transactions' | 'spend';
 const SORTS: [Sort, string][] = [['newest', 'Newest first'], ['active', 'Recently active'], ['transactions', 'Most transactions'], ['spend', 'Highest spend']];
@@ -65,15 +68,105 @@ function Gmail({ u }: { u: AdminUser }) {
   );
 }
 
+function Pulse({ u }: { u: AdminUser }) {
+  const seen = u.pulseLastSeenAt ?? u.pulseConnectedAt;
+  if (!seen) return <span className="text-muted-soft">Not connected</span>;
+  // Pulse never tells us it disconnected, so a long silence reads as idle, not connected.
+  const idle = Date.now() - new Date(seen).getTime() > 30 * 86_400_000;
+  return (
+    <span className="inline-flex items-center gap-1.5" title={`Last opened ${fmtDateTime(seen)}`}>
+      <span className={`h-2 w-2 shrink-0 rounded-full ${idle ? 'bg-muted-soft' : 'bg-credit'}`} aria-hidden />
+      <span className="whitespace-nowrap">{idle ? 'Idle' : 'Connected'} · {ago(seen)}</span>
+    </span>
+  );
+}
+
+/** Change an account's email and/or password. Works on the admin's own account too. */
+function EditUser({ u, onClose, onSaved }: { u: AdminUser; onClose: () => void; onSaved: (msg: string) => void }) {
+  const [email, setEmail] = useState(u.email);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    const nextEmail = email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(nextEmail)) return setError('Enter a valid email');
+    if (password && password.length < 6) return setError('Password must be at least 6 characters');
+    if (nextEmail === u.email && !password) return setError('Change the email or enter a new password');
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/admin/users/${u.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: nextEmail, ...(password ? { password } : {}) }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) return setError(d.error || `Couldn’t save (${res.status})`);
+    const what = [d.changed?.email && 'email', d.changed?.password && 'password'].filter(Boolean).join(' and ');
+    onSaved(`Updated ${what} for ${d.user?.email ?? nextEmail}`);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={onClose}>
+      <form
+        onSubmit={save}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-user-title"
+        className="sheet w-full space-y-4 rounded-t-3xl border border-border bg-surface p-5 shadow-card animate-fade-up sm:max-w-md sm:rounded-3xl"
+      >
+        <div className="flex items-center gap-3">
+          <Avatar u={u} />
+          <div className="min-w-0 flex-1">
+            <h2 id="edit-user-title" className="h-section">Edit account</h2>
+            <p className="truncate text-xs text-muted">ID {u.id} · joined {fmtDate(u.createdAt)}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="icon-btn"><Icon name="close" size={16} /></button>
+        </div>
+
+        <div>
+          <label htmlFor="edit-email" className="mb-1.5 block text-xs font-semibold text-muted">Email</label>
+          <input id="edit-email" className="input" type="email" autoComplete="off" value={email} onChange={(e) => { setEmail(e.target.value); setError(null); }} />
+        </div>
+        <div>
+          <PasswordField label="New password" value={password} onChange={(v) => { setPassword(v); setError(null); }} placeholder="Leave empty to keep the current one" autoComplete="new-password" strength />
+          <p className="mt-1.5 text-xs text-muted">Devices already signed in stay signed in.</p>
+        </div>
+
+        {u.isAdmin && (
+          <p className="rounded-2xl bg-surface-2 px-3 py-2 text-xs text-muted">This is an admin account. It stays an admin if you change its email.</p>
+        )}
+        {error && <p className="text-sm font-semibold text-debit">{error}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose} className="btn-outline flex-1">Cancel</button>
+          <button type="submit" disabled={busy} className="btn-primary flex-1">{busy ? 'Saving…' : 'Save changes'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [data, setData] = useState<{ totals: Totals; users: AdminUser[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('newest');
+  const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/admin/users')
+  const load = useCallback(() => {
+    return fetch('/api/admin/users')
       .then(async (r) => {
         if (r.status === 403) {
           fetch('/api/me').then((m) => m.json()).then((d) => setSignedInAs(d.email ?? null)).catch(() => {});
@@ -84,6 +177,16 @@ export default function AdminPage() {
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   const users = useMemo(() => {
     const list = (data?.users ?? []).filter((u) => u.email.includes(q.trim().toLowerCase()));
@@ -125,12 +228,29 @@ export default function AdminPage() {
   const month = new Date().toLocaleDateString('en-IN', { month: 'long' });
   const tiles = [
     { label: 'Active this week', value: T?.activeThisWeek, sub: 'added transactions', icon: 'repeat', soft: '#E2F1EA', ink: '#1E6349', solid: '#2A8A69' },
-    { label: 'Transactions', value: T?.transactions.toLocaleString('en-IN'), sub: 'across all accounts', icon: 'transactions', soft: '#E8EFFA', ink: '#2F5A94', solid: '#3D7FC1' },
     { label: 'Gmail connected', value: T?.gmailConnected, sub: T ? `of ${T.users} accounts` : '', icon: 'receipt', soft: '#EEEAF8', ink: '#5A3F8C', solid: '#9B62B8' },
+    { label: 'Pulse connected', value: T?.pulseConnected, sub: T ? `of ${T.users} accounts` : '', icon: 'phone', soft: '#E8EFFA', ink: '#2F5A94', solid: '#3D7FC1' },
   ];
 
   return (
     <div className="space-y-5 pt-1">
+      {editing && (
+        <EditUser
+          u={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(msg) => {
+            setEditing(null);
+            setNotice(msg);
+            load();
+          }}
+        />
+      )}
+      {notice && (
+        <div role="status" className="card-tinted animate-fade-in flex items-center gap-2.5 p-3 text-sm font-semibold" style={{ ['--tone-soft' as string]: '#E2F1EA', ['--tone-border' as string]: '#2A8A6940' }}>
+          <span className="tile h-7 w-7 shrink-0 bg-[rgb(var(--credit))] text-white"><Icon name="check" size={14} /></span>
+          {notice}
+        </div>
+      )}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="h-page">Users</h1>
@@ -172,7 +292,7 @@ export default function AdminPage() {
       <section className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-5">
           <h2 className="h-section">All accounts</h2>
-          <span className="text-xs font-semibold text-muted">{data ? `${users.length} of ${data.users.length}` : 'Loading…'}</span>
+          <span className="text-xs font-semibold text-muted">{data ? `${users.length} of ${data.users.length} · ${data.totals.transactions.toLocaleString('en-IN')} transactions` : 'Loading…'}</span>
         </div>
 
         {data && users.length === 0 && <p className="px-5 py-10 text-center text-sm text-muted">No accounts match “{q}”.</p>}
@@ -180,7 +300,7 @@ export default function AdminPage() {
         {/* Desktop: table */}
         {users.length > 0 && (
           <div className="scroll-x hidden lg:block">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="whitespace-nowrap text-left text-[11px] font-semibold uppercase tracking-wide text-muted">
                   <th className="px-5 py-3">Account</th>
@@ -188,7 +308,9 @@ export default function AdminPage() {
                   <th className="px-3 py-3 text-right">Transactions</th>
                   <th className="px-3 py-3 text-right">Spent in {month}</th>
                   <th className="px-3 py-3">Gmail</th>
-                  <th className="px-5 py-3">Last activity</th>
+                  <th className="px-3 py-3">Pulse</th>
+                  <th className="px-3 py-3">Last activity</th>
+                  <th className="px-5 py-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -207,7 +329,13 @@ export default function AdminPage() {
                     <td className="px-3 py-3 text-right font-semibold tabular">{u.transactions.toLocaleString('en-IN')}</td>
                     <td className="px-3 py-3 text-right font-semibold tabular">{u.monthSpend ? inr(u.monthSpend) : <span className="text-muted-soft">–</span>}</td>
                     <td className="max-w-[220px] px-3 py-3 text-muted"><Gmail u={u} /></td>
-                    <td className="whitespace-nowrap px-5 py-3 text-muted" title={u.lastActivityAt ? fmtDateTime(u.lastActivityAt) : undefined}>{ago(u.lastActivityAt)}</td>
+                    <td className="px-3 py-3 text-muted"><Pulse u={u} /></td>
+                    <td className="whitespace-nowrap px-3 py-3 text-muted" title={u.lastActivityAt ? fmtDateTime(u.lastActivityAt) : undefined}>{ago(u.lastActivityAt)}</td>
+                    <td className="px-5 py-3 text-right">
+                      <button onClick={() => setEditing(u)} className="btn-outline whitespace-nowrap px-3 py-1.5 text-xs" aria-label={`Edit ${u.email}`}>
+                        <Icon name="edit" size={13} /> Edit
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -225,12 +353,14 @@ export default function AdminPage() {
                   <div className="truncate font-semibold">{u.email}</div>
                   <div className="text-xs text-muted">Joined {fmtDate(u.createdAt)} · {ago(u.lastActivityAt)}</div>
                 </div>
+                <button onClick={() => setEditing(u)} className="icon-btn-accent" aria-label={`Edit ${u.email}`}><Icon name="edit" size={15} /></button>
               </div>
               {(u.isAdmin || u.activeThisWeek) && <div className="flex flex-wrap gap-1.5"><Badges u={u} /></div>}
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 <div className="rounded-2xl bg-surface-2 px-3 py-2"><dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">Transactions</dt><dd className="font-bold tabular">{u.transactions.toLocaleString('en-IN')}</dd></div>
                 <div className="rounded-2xl bg-surface-2 px-3 py-2"><dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">Spent in {month}</dt><dd className="font-bold tabular">{u.monthSpend ? inr(u.monthSpend) : '–'}</dd></div>
                 <div className="col-span-2 rounded-2xl bg-surface-2 px-3 py-2 text-muted"><dt className="text-[11px] font-semibold uppercase tracking-wide">Gmail</dt><dd className="min-w-0 text-text"><Gmail u={u} /></dd></div>
+                <div className="col-span-2 rounded-2xl bg-surface-2 px-3 py-2 text-muted"><dt className="text-[11px] font-semibold uppercase tracking-wide">Pulse</dt><dd className="min-w-0 text-text"><Pulse u={u} /></dd></div>
               </dl>
             </li>
           ))}
