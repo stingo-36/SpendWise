@@ -68,13 +68,17 @@ function Gmail({ u }: { u: AdminUser }) {
 export default function AdminPage() {
   const [data, setData] = useState<{ totals: Totals; users: AdminUser[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('newest');
 
   useEffect(() => {
     fetch('/api/admin/users')
       .then(async (r) => {
-        if (r.status === 403) throw new Error('This page is only for SpendWise admins.');
+        if (r.status === 403) {
+          fetch('/api/me').then((m) => m.json()).then((d) => setSignedInAs(d.email ?? null)).catch(() => {});
+          throw new Error('This page is only for SpendWise admins.');
+        }
         if (!r.ok) throw new Error(`Couldn’t load users (${r.status}).`);
         setData(await r.json());
       })
@@ -99,6 +103,20 @@ export default function AdminPage() {
         <span className="tile mx-auto mb-3 h-12 w-12 bg-blush text-debit"><Icon name="lock" size={20} /></span>
         <div className="font-bold">No access</div>
         <p className="mt-1 text-sm text-muted">{error}</p>
+        {signedInAs && (
+          <>
+            <p className="mt-3 text-sm text-muted">You’re signed in as <span className="font-semibold text-text">{signedInAs}</span>.</p>
+            <button
+              className="btn-primary mt-4"
+              onClick={async () => {
+                await fetch('/api/logout', { method: 'POST' });
+                window.location.href = '/login?next=/admin';
+              }}
+            >
+              Sign in as admin
+            </button>
+          </>
+        )}
       </div>
     );
   }
