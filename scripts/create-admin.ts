@@ -16,7 +16,7 @@ async function main() {
   const email = (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD ?? '';
   if (!email || password.length < 6) throw new Error('Set ADMIN_EMAIL and ADMIN_PASSWORD (6+ characters) in .env');
-  if (!isAdminEmail(email)) throw new Error(`${email} is not in ADMIN_EMAILS, so it would sign in as a normal user`);
+  if (!isAdminEmail(email)) throw new Error(`${email} is not an admin email (admin@spendwise.app or one in ADMIN_EMAILS)`);
 
   const passwordHash = hashPassword(password);
   const user = await prisma.user.upsert({ where: { email }, update: { passwordHash }, create: { email, passwordHash } });
