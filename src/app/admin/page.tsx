@@ -300,17 +300,16 @@ export default function AdminPage() {
         {/* Desktop: table */}
         {users.length > 0 && (
           <div className="scroll-x hidden xl:block">
-            <table className="w-full min-w-[980px] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="whitespace-nowrap text-left text-[11px] font-semibold uppercase tracking-wide text-muted">
                   <th className="px-5 py-3">Account</th>
                   <th className="px-3 py-3">Joined</th>
-                  <th className="px-3 py-3 text-right">Transactions</th>
                   <th className="px-3 py-3 text-right">Spent in {month}</th>
                   <th className="px-3 py-3">Gmail</th>
                   <th className="px-3 py-3">Pulse</th>
                   <th className="px-3 py-3">Last activity</th>
-                  <th className="px-5 py-3"><span className="sr-only">Actions</span></th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -321,12 +320,11 @@ export default function AdminPage() {
                         <Avatar u={u} />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2"><span className="truncate font-semibold">{u.email}</span><Badges u={u} /></div>
-                          <div className="text-xs text-muted">ID {u.id}{u.budgets ? ` · ${u.budgets} budgets` : ''}</div>
+                          <div className="text-xs text-muted">ID {u.id} · {u.transactions.toLocaleString('en-IN')} transactions{u.budgets ? ` · ${u.budgets} budgets` : ''}</div>
                         </div>
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-muted">{fmtDate(u.createdAt)}</td>
-                    <td className="px-3 py-3 text-right font-semibold tabular">{u.transactions.toLocaleString('en-IN')}</td>
                     <td className="px-3 py-3 text-right font-semibold tabular">{u.monthSpend ? inr(u.monthSpend) : <span className="text-muted-soft">–</span>}</td>
                     <td className="max-w-[220px] px-3 py-3 text-muted"><Gmail u={u} /></td>
                     <td className="px-3 py-3 text-muted"><Pulse u={u} /></td>

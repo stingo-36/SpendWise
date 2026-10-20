@@ -3,9 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { fmtDateTime } from '@/lib/format';
-import CredentialsForm from '@/components/CredentialsForm';
 import CategoryManager from '@/components/CategoryManager';
-import SmsIngest from '@/components/SmsIngest';
 
 interface Status {
   gmail: { connected: boolean; email: string | null };
@@ -66,19 +64,10 @@ function SettingsInner() {
         <div className="rounded-lg border border-debit/40 bg-debit/5 p-3 text-sm">
           <span className="font-medium text-debit">Gmail connection failed:</span> {gmailError}
           {/missing|not set|env/i.test(gmailError) && (
-            <span className="text-muted"> — set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI, then restart.</span>
+            <span className="text-muted"> — the Google credentials aren’t set up yet. Ask your SpendWise admin to add them under App settings.</span>
           )}
         </div>
       )}
-
-      {/* Credentials entered via UI (no .env needed) */}
-      <CredentialsForm onSaved={load} />
-
-      {/* Category management */}
-      <CategoryManager />
-
-      {/* Bank SMS forwarding (the mobile counterpart to Gmail sync) */}
-      <SmsIngest />
 
       {/* Gmail */}
       <section className="rounded-2xl border border-border bg-surface p-4 space-y-2">
@@ -93,6 +82,9 @@ function SettingsInner() {
         </a>
         <p className="text-xs text-muted">Scope: gmail.readonly only. The app never writes to any account.</p>
       </section>
+
+      {/* Category management */}
+      <CategoryManager />
 
       {/* Pipeline */}
       <section className="rounded-2xl border border-border bg-surface p-4 space-y-3">

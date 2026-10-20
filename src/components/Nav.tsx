@@ -17,7 +17,10 @@ const LINKS = [
   { href: '/parser-health', label: 'Parsers', icon: 'parsers' },
   { href: '/settings', label: 'Settings', icon: 'settings' },
 ];
-const ADMIN_LINKS = [{ href: '/admin', label: 'Users', icon: 'users' }];
+const ADMIN_LINKS = [
+  { href: '/admin', label: 'Users', icon: 'users' },
+  { href: '/admin/settings', label: 'App settings', icon: 'settings' },
+];
 
 export default function Nav() {
   const pathname = usePathname();
@@ -32,7 +35,8 @@ export default function Nav() {
       .then((d) => setIsAdmin(!!d?.isAdmin))
       .catch(() => {});
   }, []);
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
+  // '/admin' is a parent of '/admin/settings', so it only matches exactly.
+  const isActive = (href: string) => pathname === href || (href !== '/admin' && pathname.startsWith(href + '/'));
 
   // The admin account has no spending of its own, so any other page is empty
   // for it — e.g. after login sent it back to ?next=/dashboard.

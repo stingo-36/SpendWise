@@ -102,6 +102,15 @@ export default function CredentialsForm({ onSaved }: { onSaved?: () => void }) {
           onChange={(e) => setRedirectUri(e.target.value)}
           className="w-full rounded-md border border-border bg-surface-2 px-2 py-2 text-sm font-mono"
         />
+        {/* A redirect on another host sends users back to the wrong site after Google sign-in. */}
+        {redirectUri && typeof window !== 'undefined' && !redirectUri.startsWith(window.location.origin) && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-blush px-3 py-2 text-xs text-debit">
+            <span className="font-semibold">This isn’t this site’s address ({window.location.host}).</span>
+            <button type="button" onClick={() => setRedirectUri(defaultRedirect())} className="font-bold underline">
+              Use {defaultRedirect()}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="pt-1 border-t border-border" />
