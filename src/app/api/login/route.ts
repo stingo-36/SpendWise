@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { verifyPassword } from '@/lib/password';
 import { SESSION_COOKIE, createSession } from '@/lib/auth';
 import { dbErrorResponse } from '@/lib/db-error';
+import { isAdminEmail } from '@/lib/admin';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
   }
 
-  const res = NextResponse.json({ ok: true });
+  const res = NextResponse.json({ ok: true, isAdmin: isAdminEmail(user.email) });
   res.cookies.set(SESSION_COOKIE, await createSession(user.id), {
     httpOnly: true,
     sameSite: 'lax',
