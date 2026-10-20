@@ -17,11 +17,21 @@ const LINKS = [
   { href: '/parser-health', label: 'Parsers', icon: 'parsers' },
   { href: '/settings', label: 'Settings', icon: 'settings' },
 ];
+const ADMIN_LINKS = [{ href: '/admin', label: 'Users', icon: 'users' }];
 
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const links = isAdmin ? ADMIN_LINKS : LINKS;
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setIsAdmin(!!d?.isAdmin))
+      .catch(() => {});
+  }, []);
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
   // Close the drawer whenever the route changes.
@@ -52,11 +62,11 @@ export default function Nav() {
         <div className="grid h-9 w-9 place-items-center rounded-2xl bg-amber text-[rgb(var(--ink))] text-lg font-bold">₹</div>
         <div>
           <div className="text-[15px] font-semibold leading-tight text-white">Spendwise</div>
-          <div className="text-xs text-[rgb(var(--sidebar-muted))]">Expense tracker</div>
+          <div className="text-xs text-[rgb(var(--sidebar-muted))]">{isAdmin ? 'Admin console' : 'Expense tracker'}</div>
         </div>
       </div>
       <nav className="flex flex-col gap-1">
-        {LINKS.map((l) => (
+        {links.map((l) => (
           <Link
             key={l.href}
             href={l.href}
@@ -78,7 +88,7 @@ export default function Nav() {
           <Icon name="logout" size={18} className="shrink-0" />
           Sign out
         </button>
-        <div className="px-3 text-[11px] text-[rgb(var(--sidebar-muted))]/70">Read-only · self-hosted</div>
+        <div className="px-3 text-[11px] text-[rgb(var(--sidebar-muted))]/70">{isAdmin ? 'Signed in as admin' : 'Read-only · self-hosted'}</div>
       </div>
     </div>
   );

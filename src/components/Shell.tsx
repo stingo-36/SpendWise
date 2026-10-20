@@ -9,16 +9,18 @@ import AutoSync from './AutoSync';
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const bare = pathname === '/' || pathname === '/login' || pathname === '/signup';
+  // The admin console manages accounts, not a mailbox: no Gmail banner or auto-sync.
+  const admin = pathname === '/admin' || pathname.startsWith('/admin/');
 
   if (bare) return <>{children}</>;
 
   return (
     <>
-      <AutoSync />
+      {!admin && <AutoSync />}
       <Nav />
       <main className="lg:pl-[264px] min-h-screen pt-14 lg:pt-0">
         <div className="mx-auto max-w-[1600px] px-safe py-5 pb-10 sm:px-6 lg:px-8">
-          <GmailBanner />
+          {!admin && <GmailBanner />}
           {children}
         </div>
       </main>

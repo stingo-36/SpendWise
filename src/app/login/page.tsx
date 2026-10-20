@@ -24,7 +24,8 @@ function LoginForm() {
       body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
-      router.push(params.get('next') || '/dashboard');
+      const { isAdmin } = await res.json().catch(() => ({}));
+      router.push(params.get('next') || (isAdmin ? '/admin' : '/dashboard'));
       router.refresh();
     } else {
       // A 5xx from the server is an HTML page, not JSON — don't let the parse
