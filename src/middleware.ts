@@ -9,8 +9,8 @@ const PUBLIC_EXACT = ['/', '/manifest.json', '/sw.js'];
 // cookie gate here, and is NOT unauthenticated. Named exactly, never as the
 // '/api/ingest' prefix, so sibling routes under it stay behind the session.
 // '/api/mobile/*' is the same story for the Pulse app: connect checks the
-// password itself, summary checks the mobile read token.
-const PUBLIC_PREFIX = ['/login', '/signup', '/api/login', '/api/signup', '/api/logout', '/icons', '/api/ingest/sms', '/api/mobile/connect', '/api/mobile/summary'];
+// password itself, summary and transactions check the mobile read token.
+const PUBLIC_PREFIX = ['/login', '/signup', '/api/login', '/api/signup', '/api/logout', '/icons', '/api/ingest/sms', '/api/mobile/connect', '/api/mobile/summary', '/api/mobile/transactions'];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

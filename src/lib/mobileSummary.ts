@@ -21,6 +21,11 @@ export interface MobileSummary {
   weeks: { label: string; total: number }[];
   recent: { id: number; merchant: string; amount: number; occurredAt: string; category: string | null; instrument: string; isCreditCard: boolean }[];
   uncategorizedCount: number;
+  /** Spend charged to registered credit cards this month (part of totalSpend). */
+  creditCardSpend: number;
+  /** Credits landing in the bank account, and debits that actually left it. */
+  moneyIn: number;
+  accountOutflow: number;
 }
 
 const IST_OFFSET_MS = 330 * 60 * 1000;
@@ -43,7 +48,7 @@ export async function getMobileSummary(userId: number, month: string): Promise<M
     prisma.transaction.findMany({
       where: { userId, direction: 'debit' },
       orderBy: { occurredAt: 'desc' },
-      take: 20,
+      take: 30,
       select: {
         id: true, amount: true, occurredAt: true, merchant: true, displayLabel: true, instrument: true,
         isCreditCard: true, categoryId: true, subcategoryId: true, category: { select: { name: true } },
@@ -81,7 +86,7 @@ export async function getMobileSummary(userId: number, month: string): Promise<M
     })),
     weeks: weekly.weeks.map((w) => ({ label: w.label, total: w.total })),
     // Transfers and card-bill payments are not spend, so they stay off the list.
-    recent: recentTxns.filter(isExpense).slice(0, 8).map((t) => ({
+    recent: recentTxns.filter(isExpense).slice(0, 10).map((t) => ({
       id: t.id,
       merchant: t.displayLabel || t.merchant,
       amount: round(Number(t.amount)),
@@ -91,5 +96,8 @@ export async function getMobileSummary(userId: number, month: string): Promise<M
       isCreditCard: t.isCreditCard,
     })),
     uncategorizedCount: overview.uncategorizedCount,
+    creditCardSpend: overview.creditCardSpend,
+    moneyIn: overview.totalMoneyIn,
+    accountOutflow: overview.accountOutflow,
   };
 }
