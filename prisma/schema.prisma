@@ -30,9 +30,10 @@ model User {
   createdAt     DateTime @default(now()) @map("created_at")
   /// Admin console access. Follows the account, so the admin can change its email.
   isAdmin       Boolean  @default(false) @map("is_admin")
-  /// When the Pulse app last linked this account, and last fetched its summary.
-  pulseConnectedAt DateTime? @map("pulse_connected_at")
-  pulseLastSeenAt  DateTime? @map("pulse_last_seen_at")
+  /// When the Kaizen app last linked this account, and last fetched its summary.
+  /// (Columns keep their pulse_* names from when the app was called Pulse; renaming them would need a migration.)
+  kaizenConnectedAt DateTime? @map("pulse_connected_at")
+  kaizenLastSeenAt  DateTime? @map("pulse_last_seen_at")
 
   @@map("users")
 }
