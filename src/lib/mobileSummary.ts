@@ -1,5 +1,5 @@
 /**
- * The spending summary the Pulse mobile app shows (its home card and Spending
+ * The spending summary the Kaizen mobile app shows (its home card and Spending
  * screen). Built from the same reporting functions as the web overview, so the
  * phone and the dashboard always agree on the month's totals.
  */

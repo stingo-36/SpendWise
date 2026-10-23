@@ -7,7 +7,7 @@ import { bearer, mobileJson, preflight } from '@/lib/mobileApi';
 
 export const runtime = 'nodejs';
 
-/** The Pulse app's spending summary. Authenticated by the mobile read token. */
+/** The Kaizen app's spending summary. Authenticated by the mobile read token. */
 export async function GET(req: NextRequest) {
   const userId = await verifyMobileToken(bearer(req));
   if (userId == null) return mobileJson({ error: 'unauthorized' }, 401);
@@ -15,12 +15,12 @@ export async function GET(req: NextRequest) {
   const month = req.nextUrl.searchParams.get('month') || currentMonth();
   if (!/^\d{4}-\d{2}$/.test(month)) return mobileJson({ error: 'month must be YYYY-MM' }, 400);
 
-  // "Last seen in Pulse" for the admin console, written at most every 10 min.
+  // "Last seen in Kaizen" for the admin console, written at most every 10 min.
   const now = new Date();
   prisma.user
     .updateMany({
-      where: { id: userId, OR: [{ pulseLastSeenAt: null }, { pulseLastSeenAt: { lt: new Date(now.getTime() - 10 * 60_000) } }] },
-      data: { pulseLastSeenAt: now },
+      where: { id: userId, OR: [{ kaizenLastSeenAt: null }, { kaizenLastSeenAt: { lt: new Date(now.getTime() - 10 * 60_000) } }] },
+      data: { kaizenLastSeenAt: now },
     })
     .catch(() => {});
 

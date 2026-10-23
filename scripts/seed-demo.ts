@@ -1,6 +1,6 @@
 /**
  * Demo account with realistic dummy spending, for trying the dashboard and
- * the Pulse app without real bank data.
+ * the Kaizen app without real bank data.
  *
  *   npm run seed:demo
  *

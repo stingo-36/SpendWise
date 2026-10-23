@@ -18,10 +18,10 @@ interface AdminUser {
   lastSyncStatus: string | null;
   budgets: number;
   activeThisWeek: boolean;
-  pulseConnectedAt: string | null;
-  pulseLastSeenAt: string | null;
+  kaizenConnectedAt: string | null;
+  kaizenLastSeenAt: string | null;
 }
-interface Totals { users: number; newThisMonth: number; activeThisWeek: number; transactions: number; gmailConnected: number; pulseConnected: number }
+interface Totals { users: number; newThisMonth: number; activeThisWeek: number; transactions: number; gmailConnected: number; kaizenConnected: number }
 
 type Sort = 'newest' | 'active' | 'transactions' | 'spend';
 const SORTS: [Sort, string][] = [['newest', 'Newest first'], ['active', 'Recently active'], ['transactions', 'Most transactions'], ['spend', 'Highest spend']];
@@ -68,10 +68,10 @@ function Gmail({ u }: { u: AdminUser }) {
   );
 }
 
-function Pulse({ u }: { u: AdminUser }) {
-  const seen = u.pulseLastSeenAt ?? u.pulseConnectedAt;
+function Kaizen({ u }: { u: AdminUser }) {
+  const seen = u.kaizenLastSeenAt ?? u.kaizenConnectedAt;
   if (!seen) return <span className="text-muted-soft">Not connected</span>;
-  // Pulse never tells us it disconnected, so a long silence reads as idle, not connected.
+  // Kaizen never tells us it disconnected, so a long silence reads as idle, not connected.
   const idle = Date.now() - new Date(seen).getTime() > 30 * 86_400_000;
   return (
     <span className="inline-flex items-start gap-1.5" title={`Last opened ${fmtDateTime(seen)}`}>
@@ -313,7 +313,7 @@ export default function AdminPage() {
   const tiles = [
     { label: 'Active this week', value: T?.activeThisWeek, sub: 'added transactions', icon: 'repeat', soft: '#E2F1EA', ink: '#1E6349', solid: '#2A8A69' },
     { label: 'Gmail connected', value: T?.gmailConnected, sub: T ? `of ${T.users} accounts` : '', icon: 'receipt', soft: '#EEEAF8', ink: '#5A3F8C', solid: '#9B62B8' },
-    { label: 'Pulse connected', value: T?.pulseConnected, sub: T ? `of ${T.users} accounts` : '', icon: 'phone', soft: '#E8EFFA', ink: '#2F5A94', solid: '#3D7FC1' },
+    { label: 'Kaizen connected', value: T?.kaizenConnected, sub: T ? `of ${T.users} accounts` : '', icon: 'phone', soft: '#E8EFFA', ink: '#2F5A94', solid: '#3D7FC1' },
   ];
 
   return (
@@ -391,7 +391,7 @@ export default function AdminPage() {
                   <th className="px-2.5 py-3">Joined</th>
                   <th className="px-2.5 py-3 text-right">Spent · {month.slice(0, 3)}</th>
                   <th className="px-2.5 py-3">Gmail</th>
-                  <th className="px-2.5 py-3">Pulse</th>
+                  <th className="px-2.5 py-3">Kaizen</th>
                   <th className="px-2.5 py-3">Last activity</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
@@ -412,7 +412,7 @@ export default function AdminPage() {
                     <td className="whitespace-nowrap px-2.5 py-3 text-muted">{fmtDate(u.createdAt)}</td>
                     <td className="px-2.5 py-3 text-right font-semibold tabular">{u.monthSpend ? inr(u.monthSpend) : <span className="text-muted-soft">–</span>}</td>
                     <td className="max-w-[170px] px-2.5 py-3 text-muted"><Gmail u={u} /></td>
-                    <td className="px-2.5 py-3 text-muted"><Pulse u={u} /></td>
+                    <td className="px-2.5 py-3 text-muted"><Kaizen u={u} /></td>
                     <td className="whitespace-nowrap px-2.5 py-3 text-muted" title={u.lastActivityAt ? fmtDateTime(u.lastActivityAt) : undefined}>{ago(u.lastActivityAt)}</td>
                     <td className="px-5 py-3 text-right">
                       <div className="flex justify-end gap-1.5">
@@ -457,7 +457,7 @@ export default function AdminPage() {
                 <div className="rounded-2xl bg-surface-2 px-3 py-2"><dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">Transactions</dt><dd className="font-bold tabular">{u.transactions.toLocaleString('en-IN')}</dd></div>
                 <div className="rounded-2xl bg-surface-2 px-3 py-2"><dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">Spent in {month}</dt><dd className="font-bold tabular">{u.monthSpend ? inr(u.monthSpend) : '–'}</dd></div>
                 <div className="col-span-2 rounded-2xl bg-surface-2 px-3 py-2 text-muted"><dt className="text-[11px] font-semibold uppercase tracking-wide">Gmail</dt><dd className="min-w-0 text-text"><Gmail u={u} /></dd></div>
-                <div className="col-span-2 rounded-2xl bg-surface-2 px-3 py-2 text-muted"><dt className="text-[11px] font-semibold uppercase tracking-wide">Pulse</dt><dd className="min-w-0 text-text"><Pulse u={u} /></dd></div>
+                <div className="col-span-2 rounded-2xl bg-surface-2 px-3 py-2 text-muted"><dt className="text-[11px] font-semibold uppercase tracking-wide">Kaizen</dt><dd className="min-w-0 text-text"><Kaizen u={u} /></dd></div>
               </dl>
               <button onClick={() => togglePipeline(u.id)} aria-expanded={pipelineFor === u.id} className={`w-full py-2 text-xs ${pipelineFor === u.id ? 'btn-primary' : 'btn-outline'}`}>
                 <Icon name="parsers" size={13} /> {pipelineFor === u.id ? 'Hide pipeline' : 'Pipeline'}

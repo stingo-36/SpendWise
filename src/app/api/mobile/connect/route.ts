@@ -7,7 +7,7 @@ import { mobileJson, preflight } from '@/lib/mobileApi';
 export const runtime = 'nodejs';
 
 /**
- * Link the Pulse mobile app to a SpendWise account.
+ * Link the Kaizen mobile app to a SpendWise account.
  *
  * Takes the SpendWise email and password once and returns a read-only mobile
  * token; the app stores the token, never the password. Unlike /api/login this
@@ -28,10 +28,10 @@ export async function POST(req: NextRequest) {
     return mobileJson({ error: 'Invalid email or password' }, 401);
   }
 
-  // Shown as "Pulse connected" in the admin console. Best effort: linking
+  // Shown as "Kaizen connected" in the admin console. Best effort: linking
   // must not fail just because this bookkeeping did.
   const now = new Date();
-  await prisma.user.update({ where: { id: user.id }, data: { pulseConnectedAt: now, pulseLastSeenAt: now } }).catch(() => {});
+  await prisma.user.update({ where: { id: user.id }, data: { kaizenConnectedAt: now, kaizenLastSeenAt: now } }).catch(() => {});
 
   return mobileJson({ token: await createMobileToken(user.id), email: user.email });
 }

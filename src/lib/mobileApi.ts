@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Shared bits for the /api/mobile/* routes the Pulse app calls.
+ * Shared bits for the /api/mobile/* routes the Kaizen app calls.
  *
  * They authenticate with a bearer token or a password in the body, never a
  * cookie, so allowing any origin is safe — and needed for the app's web

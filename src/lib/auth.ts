@@ -51,7 +51,7 @@ export async function verifyIngestToken(value: string | undefined | null): Promi
 }
 
 /**
- * Per-user read-only token for the Pulse mobile app's spending summary.
+ * Per-user read-only token for the Kaizen mobile app's spending summary.
  *
  * Same derivation as the ingest token under its own prefix, so it can read
  * the summary and nothing else: it is not a session (no access to the rest of

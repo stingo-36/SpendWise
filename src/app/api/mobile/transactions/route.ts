@@ -15,7 +15,7 @@ function monthBounds(month: string): { gte: Date; lt: Date } {
 }
 
 /**
- * The Pulse app's full transaction list, newest first. Read-only, authenticated
+ * The Kaizen app's full transaction list, newest first. Read-only, authenticated
  * by the mobile read token. Query: month=YYYY-MM (omit for all time), page, pageSize (max 100).
  */
 export async function GET(req: NextRequest) {

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   const [users, txnStats, monthDebits, recentTxn, gmail, syncs, budgets, cats] = await Promise.all([
     prisma.user.findMany({
-      select: { id: true, email: true, createdAt: true, isAdmin: true, pulseConnectedAt: true, pulseLastSeenAt: true },
+      select: { id: true, email: true, createdAt: true, isAdmin: true, kaizenConnectedAt: true, kaizenLastSeenAt: true },
       orderBy: { createdAt: 'desc' },
     }),
     prisma.transaction.groupBy({ by: ['userId'], _count: { _all: true }, _max: { occurredAt: true, createdAt: true } }),
@@ -55,8 +55,8 @@ export async function GET(req: NextRequest) {
       lastSyncStatus: sy?.lastSyncStatus ?? null,
       budgets: bud.get(u.id)?._count._all ?? 0,
       activeThisWeek: (recent.get(u.id)?._count._all ?? 0) > 0,
-      pulseConnectedAt: u.pulseConnectedAt?.toISOString() ?? null,
-      pulseLastSeenAt: u.pulseLastSeenAt?.toISOString() ?? null,
+      kaizenConnectedAt: u.kaizenConnectedAt?.toISOString() ?? null,
+      kaizenLastSeenAt: u.kaizenLastSeenAt?.toISOString() ?? null,
     };
   });
 
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       activeThisWeek: rows.filter((r) => r.activeThisWeek).length,
       transactions: rows.reduce((s, r) => s + r.transactions, 0),
       gmailConnected: rows.filter((r) => r.gmail).length,
-      pulseConnected: rows.filter((r) => r.pulseConnectedAt).length,
+      kaizenConnected: rows.filter((r) => r.kaizenConnectedAt).length,
     },
     users: rows,
   });
