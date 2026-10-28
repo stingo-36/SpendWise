@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { verifyMobileToken } from '@/lib/auth';
+import { liveUserId } from '@/lib/session-server';
 import { prisma } from '@/lib/db';
 import { currentMonth } from '@/lib/reporting';
 import { getMobileSummary } from '@/lib/mobileSummary';
@@ -9,7 +10,7 @@ export const runtime = 'nodejs';
 
 /** The Kaizen app's spending summary. Authenticated by the mobile read token. */
 export async function GET(req: NextRequest) {
-  const userId = await verifyMobileToken(bearer(req));
+  const userId = await liveUserId(await verifyMobileToken(bearer(req)));
   if (userId == null) return mobileJson({ error: 'unauthorized' }, 401);
 
   const month = req.nextUrl.searchParams.get('month') || currentMonth();

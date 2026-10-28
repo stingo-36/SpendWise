@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { verifyIngestToken } from '@/lib/auth';
+import { liveUserId } from '@/lib/session-server';
 import { parserForSmsSender } from '@/config/banks';
 import { runParsePass } from '@/lib/parsePass';
 
@@ -39,7 +40,7 @@ function bearer(req: NextRequest): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = await verifyIngestToken(bearer(req));
+  const userId = await liveUserId(await verifyIngestToken(bearer(req)));
   if (userId == null) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }

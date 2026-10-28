@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { verifyMobileToken } from '@/lib/auth';
+import { liveUserId } from '@/lib/session-server';
 import { prisma } from '@/lib/db';
 import { bearer, mobileJson, preflight } from '@/lib/mobileApi';
 
@@ -19,7 +20,7 @@ function monthBounds(month: string): { gte: Date; lt: Date } {
  * by the mobile read token. Query: month=YYYY-MM (omit for all time), page, pageSize (max 100).
  */
 export async function GET(req: NextRequest) {
-  const userId = await verifyMobileToken(bearer(req));
+  const userId = await liveUserId(await verifyMobileToken(bearer(req)));
   if (userId == null) return mobileJson({ error: 'unauthorized' }, 401);
 
   const sp = req.nextUrl.searchParams;
