@@ -238,6 +238,68 @@ function EditUser({ u, onClose, onSaved }: { u: AdminUser; onClose: () => void; 
   );
 }
 
+/** Delete an account and all its data. The admin has to type the email to confirm. */
+function DeleteUser({ u, onClose, onDeleted }: { u: AdminUser; onClose: () => void; onDeleted: (msg: string) => void }) {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const matches = typed.trim().toLowerCase() === u.email;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !busy && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, busy]);
+
+  async function remove(e: React.FormEvent) {
+    e.preventDefault();
+    if (!matches) return;
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/admin/users/${u.id}?confirm=${encodeURIComponent(u.email)}`, { method: 'DELETE' });
+    const d = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) return setError(d.error || `Couldn’t delete (${res.status})`);
+    onDeleted(`Deleted ${u.email} and ${(d.removed?.transactions ?? 0).toLocaleString('en-IN')} transactions`);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={() => !busy && onClose()}>
+      <form
+        onSubmit={remove}
+        onClick={(e) => e.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-user-title"
+        className="sheet w-full space-y-4 rounded-t-3xl border border-border bg-surface p-5 shadow-card animate-fade-up sm:max-w-md sm:rounded-3xl"
+      >
+        <div className="flex items-center gap-3">
+          <span className="tile h-10 w-10 shrink-0 bg-blush text-debit"><Icon name="trash" size={17} /></span>
+          <div className="min-w-0 flex-1">
+            <h2 id="delete-user-title" className="h-section">Delete account</h2>
+            <p className="truncate text-xs text-muted">{u.email} · ID {u.id}</p>
+          </div>
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="icon-btn"><Icon name="close" size={16} /></button>
+        </div>
+
+        <p className="rounded-2xl bg-surface-2 px-3 py-2 text-sm text-muted">
+          This permanently removes the account and all its data — {u.transactions.toLocaleString('en-IN')} transactions, bank emails, subscriptions, budgets, credit cards, keyword rules and the Gmail connection. It can’t be undone.
+        </p>
+        <div>
+          <label htmlFor="delete-confirm" className="mb-1.5 block text-xs font-semibold text-muted">Type <span className="font-bold text-text">{u.email}</span> to confirm</label>
+          <input id="delete-confirm" className="input" autoComplete="off" autoFocus value={typed} onChange={(e) => { setTyped(e.target.value); setError(null); }} />
+        </div>
+        {error && <p className="text-sm font-semibold text-debit">{error}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose} disabled={busy} className="btn-outline flex-1">Cancel</button>
+          <button type="submit" disabled={!matches || busy} className="btn flex-1 bg-[rgb(var(--debit))] px-5 py-2.5 text-white active:scale-[0.97] disabled:opacity-50">{busy ? 'Deleting…' : 'Delete account'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [data, setData] = useState<{ totals: Totals; users: AdminUser[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -245,6 +307,7 @@ export default function AdminPage() {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('newest');
   const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [deleting, setDeleting] = useState<AdminUser | null>(null);
   const [pipelineFor, setPipelineFor] = useState<number | null>(null);
   const togglePipeline = (id: number) => setPipelineFor((cur) => (cur === id ? null : id));
   const [notice, setNotice] = useState<string | null>(null);
@@ -324,6 +387,18 @@ export default function AdminPage() {
           onClose={() => setEditing(null)}
           onSaved={(msg) => {
             setEditing(null);
+            setNotice(msg);
+            load();
+          }}
+        />
+      )}
+      {deleting && (
+        <DeleteUser
+          u={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={(msg) => {
+            if (pipelineFor === deleting.id) setPipelineFor(null);
+            setDeleting(null);
             setNotice(msg);
             load();
           }}
@@ -422,6 +497,11 @@ export default function AdminPage() {
                         <button onClick={() => setEditing(u)} className="btn-outline whitespace-nowrap px-3 py-1.5 text-xs" aria-label={`Edit ${u.email}`}>
                           <Icon name="edit" size={13} /> Edit
                         </button>
+                        {!u.isAdmin && (
+                          <button onClick={() => setDeleting(u)} className="icon-btn-danger h-[30px] w-[30px]" aria-label={`Delete ${u.email}`} title="Delete account">
+                            <Icon name="trash" size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -451,6 +531,7 @@ export default function AdminPage() {
                   <div className="text-xs text-muted">Joined {fmtDate(u.createdAt)} · {ago(u.lastActivityAt)}</div>
                 </div>
                 <button onClick={() => setEditing(u)} className="icon-btn-accent" aria-label={`Edit ${u.email}`}><Icon name="edit" size={15} /></button>
+                {!u.isAdmin && <button onClick={() => setDeleting(u)} className="icon-btn-danger" aria-label={`Delete ${u.email}`}><Icon name="trash" size={15} /></button>}
               </div>
               {(u.isAdmin || u.activeThisWeek) && <div className="flex flex-wrap gap-1.5"><Badges u={u} /></div>}
               <dl className="grid grid-cols-2 gap-2 text-sm">
