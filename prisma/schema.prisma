@@ -35,6 +35,8 @@ model User {
   kaizenConnectedAt DateTime? @map("pulse_connected_at")
   kaizenLastSeenAt  DateTime? @map("pulse_last_seen_at")
 
+  notes Note[]
+
   @@map("users")
 }
 
@@ -92,6 +94,7 @@ model Transaction {
   category     Category?     @relation("TxnCategory", fields: [categoryId], references: [id])
   subcategory  Category?     @relation("TxnSubcategory", fields: [subcategoryId], references: [id])
   subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  noteLinks    NoteTransaction[]
 
   /// One raw email yields at most one transaction. Postgres treats NULLs as
   /// distinct, so manually-added rows (raw_email_id NULL) are unaffected.
@@ -257,4 +260,38 @@ model GmailToken {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("gmail_tokens")
+}
+
+/// A free-form note the user keeps about payments ("Goa trip", "Rent split
+/// with Rahul"), with any number of transactions attached for the record.
+/// Purely a record: attaching a transaction changes nothing about it.
+/// Deleting the user removes their notes (FK cascade).
+model Note {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String
+  body      String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links NoteTransaction[]
+
+  @@index([userId, updatedAt])
+  @@map("notes")
+}
+
+/// Note ↔ transaction link. Cascades from both sides, so deleting a note or a
+/// transaction (wipe, dedupe merge) just drops the link.
+model NoteTransaction {
+  noteId        Int      @map("note_id")
+  transactionId Int      @map("transaction_id")
+  addedAt       DateTime @default(now()) @map("added_at")
+
+  note        Note        @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, transactionId])
+  @@index([transactionId])
+  @@map("note_transactions")
 }

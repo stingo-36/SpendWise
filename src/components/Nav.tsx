@@ -14,6 +14,7 @@ const LINKS = [
   { href: '/review', label: 'Review', icon: 'review' },
   { href: '/keywords', label: 'Keywords', icon: 'keywords' },
   { href: '/subscriptions', label: 'Subscriptions', icon: 'subscriptions' },
+  { href: '/notes', label: 'Notes', icon: 'note' },
   { href: '/parser-health', label: 'Parsers', icon: 'parsers' },
   { href: '/settings', label: 'Settings', icon: 'settings' },
 ];
@@ -126,7 +127,7 @@ export default function Nav() {
       {open && (
         <div className="lg:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setOpen(false)} />
-          {/* Scrolls: nine links plus the footer don't fit a landscape phone,
+          {/* Scrolls: ten links plus the footer don't fit a landscape phone,
               and the notch eats the left edge under viewportFit: 'cover'. */}
           <aside className="absolute left-0 inset-y-0 w-72 max-w-[82vw] overflow-y-auto bg-[rgb(var(--sidebar))] pl-[env(safe-area-inset-left)] shadow-2xl rounded-r-[28px] animate-slide-in">
             <button onClick={() => setOpen(false)} aria-label="Close menu" className="absolute top-4 right-3 grid h-8 w-8 place-items-center rounded-lg text-[rgb(var(--sidebar-muted))] hover:bg-white/10 hover:text-white">
