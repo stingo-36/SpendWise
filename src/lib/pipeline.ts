@@ -26,16 +26,17 @@ export async function runPipelineStep(userId: number, step: PipelineStep): Promi
         let fetched = '';
         let ok = true;
         try {
-          const s = await syncGmail(userId);
-          fetched = `Fetched ${n(s.inserted, 'new email')}`;
+          // Same budget as /api/sync, so a big first sync can't hit the 60s limit.
+          const s = await syncGmail(userId, { deadline: Date.now() + 30_000 });
+          fetched = `Fetched ${n(s.inserted, 'new email')}${s.done ? '' : ' (more waiting — run Sync again)'}`;
         } catch (err) {
           if (!(err instanceof GmailAuthError)) throw err;
           ok = false;
           fetched = `Gmail skipped: ${err.message}`;
         }
-        const p = await runParsePass(userId);
+        const p = await runParsePass(userId, 300, { deadline: Date.now() + 15_000 });
         const d = await dedupeTransactions(userId, { sinceDays: 120 });
-        const c = await runCategorizer(userId);
+        const c = await runCategorizer(userId, 300);
         return {
           ok,
           summary: `${fetched} · parsed ${n(p.parsed, 'transaction')} · removed ${n(d.removed, 'duplicate')} · categorised ${c.byRule + c.byLlm}`,

@@ -102,7 +102,7 @@ function richer(a: string, b: string): string {
 export async function runParsePass(
   userId: number,
   limit = 500,
-  { retryUnparsed = false }: { retryUnparsed?: boolean } = {},
+  { retryUnparsed = false, deadline = Infinity }: { retryUnparsed?: boolean; deadline?: number } = {},
 ): Promise<ParsePassResult> {
   if (retryUnparsed) {
     await prisma.rawEmail.updateMany({
@@ -124,6 +124,8 @@ export async function runParsePass(
   const ccLast4 = await creditCardLast4s(userId);
 
   for (const email of pending) {
+    // Out of time: the rest stay `pending` for the next pass.
+    if (Date.now() >= deadline) break;
     res.processed++;
     try {
       const input = {
