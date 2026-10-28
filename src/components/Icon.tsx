@@ -231,6 +231,12 @@ const paths: Record<string, React.ReactNode> = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  note: (
+    <>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
+      <path d="M14 3v6h6M8 13h8M8 17h5" />
+    </>
+  ),
   repeat: (
     <>
       <path d="m17 2 4 4-4 4" />
