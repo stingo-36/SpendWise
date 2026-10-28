@@ -73,6 +73,7 @@ export default function OverviewPage() {
   useEffect(() => {
     refresh(month);
   }, [month, refresh]);
+  const onSynced = useCallback(() => refresh(month), [month, refresh]);
 
   // Card charges are spend but haven't left the account yet, so what's left in
   // the account nets money in against account outflow only — never against
@@ -94,7 +95,7 @@ export default function OverviewPage() {
             align="right"
             className="!w-auto min-w-[11rem] rounded-full"
           />
-          <SyncButton onDone={() => refresh(month)} />
+          <SyncButton month={month} onDone={onSynced} />
         </div>
       </header>
 

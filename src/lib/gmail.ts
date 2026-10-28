@@ -187,22 +187,45 @@ export interface SyncResult {
   fetched: number;
   inserted: number;
   skipped: number; // already present (dedupe on gmail_message_id)
+  /** False when the deadline stopped the run early; calling again resumes. */
+  done: boolean;
+}
+
+export interface SyncOptions {
+  /** Only this calendar month ("YYYY-MM"). Otherwise the last `days` days. */
+  month?: string;
+  days?: number;
+  /** Epoch ms. Stop starting new downloads after this; what's stored stays stored. */
+  deadline?: number;
+}
+
+/** Messages downloaded at once. Gmail's per-user quota is far above this. */
+const CONCURRENCY = 8;
+
+/** Gmail search terms for a "YYYY-MM" month: after the 1st, before the next 1st. */
+export function monthQuery(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  const next = m === 12 ? [y + 1, 1] : [y, m + 1];
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `after:${y}/${pad(m)}/01 before:${next[0]}/${pad(next[1])}/01`;
 }
 
 /**
  * Fetch bank alert emails and store them into raw_emails (§4.3).
- * `days` bounds the query window; dedupes on gmail_message_id.
+ * Bounded by `month` or `days`; dedupes on gmail_message_id. With a
+ * `deadline` it stops early and returns done=false — every stored email is
+ * skipped next time, so repeated calls finish the job.
  */
-export async function syncGmail(userId: number, days = Number(process.env.BACKFILL_DAYS || 30)): Promise<SyncResult> {
+export async function syncGmail(userId: number, opts: SyncOptions = {}): Promise<SyncResult> {
   try {
-    return await syncGmailInner(userId, days);
+    return await syncGmailInner(userId, opts);
   } catch (err) {
     if (isInvalidGrant(err)) await onInvalidGrant(userId);
     throw err;
   }
 }
 
-async function syncGmailInner(userId: number, days: number): Promise<SyncResult> {
+async function syncGmailInner(userId: number, { month, days = Number(process.env.BACKFILL_DAYS || 30), deadline = Infinity }: SyncOptions): Promise<SyncResult> {
   const client = await authorizedClient(userId);
   const gmail = google.gmail({ version: 'v1', auth: client });
 
@@ -212,62 +235,45 @@ async function syncGmailInner(userId: number, days: number): Promise<SyncResult>
   const disabled = new Set((user?.disabledSenders ?? []).map((s) => s.trim().toLowerCase()));
   const senders = Array.from(new Set([...allSenders(), ...custom])).filter((s) => !disabled.has(s));
   const fromClause = senders.map((s) => `from:${s}`).join(' OR ');
-  const query = `(${fromClause}) newer_than:${days}d`;
+  const query = `(${fromClause}) ${month ? monthQuery(month) : `newer_than:${days}d`}`;
 
-  const res: SyncResult = { fetched: 0, inserted: 0, skipped: 0 };
+  const res: SyncResult = { fetched: 0, inserted: 0, skipped: 0, done: true };
   let pageToken: string | undefined;
   const seen = new Set<string>(); // guard against Gmail returning an id twice in one run
 
   do {
     const list = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 100, pageToken });
-    const messages = list.data.messages ?? [];
-
-    for (const msg of messages) {
+    const ids: string[] = [];
+    for (const msg of list.data.messages ?? []) {
       if (!msg.id) continue;
       res.fetched++;
-
-      // Dedupe before fetching the full message (§4.3 idempotency guarantee).
-      if (seen.has(msg.id)) {
-        res.skipped++;
-        continue;
-      }
+      if (seen.has(msg.id)) res.skipped++;
+      else ids.push(msg.id);
       seen.add(msg.id);
+    }
 
-      const existing = await prisma.rawEmail.findUnique({ where: { userId_gmailMessageId: { userId, gmailMessageId: msg.id } } });
-      if (existing) {
-        res.skipped++;
-        continue;
+    // Dedupe before fetching the full message (§4.3 idempotency guarantee) —
+    // one query per page rather than one per message.
+    const stored = new Set(
+      (await prisma.rawEmail.findMany({ where: { userId, gmailMessageId: { in: ids } }, select: { gmailMessageId: true } })).map((r) => r.gmailMessageId),
+    );
+    const missing = ids.filter((id) => !stored.has(id));
+    res.skipped += ids.length - missing.length;
+
+    // A few downloads at a time: one by one, a first sync of a busy inbox
+    // outlasts the 60s serverless limit before it stores anything useful.
+    let next = 0;
+    const worker = async () => {
+      while (next < missing.length && Date.now() < deadline) {
+        const id = missing[next++];
+        if (await storeMessage(gmail, userId, id)) res.inserted++;
+        else res.skipped++;
       }
-
-      const full = await gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'full' });
-      const payload = full.data.payload;
-      const headers = payload?.headers ?? [];
-      const { text, html } = extractBodies(payload);
-      const internalDate = full.data.internalDate ? new Date(Number(full.data.internalDate)) : new Date();
-
-      try {
-        await prisma.rawEmail.create({
-          data: {
-            userId,
-            gmailMessageId: msg.id,
-            gmailThreadId: full.data.threadId ?? null,
-            sender: header(headers, 'From'),
-            subject: header(headers, 'Subject'),
-            bodyText: text,
-            bodyHtml: html,
-            receivedAt: internalDate,
-            parseStatus: 'pending',
-          },
-        });
-        res.inserted++;
-      } catch (err: any) {
-        // Unique-constraint race on gmail_message_id → already stored; skip, don't crash.
-        if (err?.code === 'P2002') {
-          res.skipped++;
-        } else {
-          throw err;
-        }
-      }
+    };
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    if (next < missing.length) {
+      res.done = false;
+      return res;
     }
 
     pageToken = list.data.nextPageToken ?? undefined;
@@ -280,4 +286,34 @@ async function syncGmailInner(userId: number, days: number): Promise<SyncResult>
   });
 
   return res;
+}
+
+/** Download one message into raw_emails. False if it was already stored. */
+async function storeMessage(gmail: ReturnType<typeof google.gmail>, userId: number, id: string): Promise<boolean> {
+  const full = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
+  const payload = full.data.payload;
+  const headers = payload?.headers ?? [];
+  const { text, html } = extractBodies(payload);
+  const internalDate = full.data.internalDate ? new Date(Number(full.data.internalDate)) : new Date();
+
+  try {
+    await prisma.rawEmail.create({
+      data: {
+        userId,
+        gmailMessageId: id,
+        gmailThreadId: full.data.threadId ?? null,
+        sender: header(headers, 'From'),
+        subject: header(headers, 'Subject'),
+        bodyText: text,
+        bodyHtml: html,
+        receivedAt: internalDate,
+        parseStatus: 'pending',
+      },
+    });
+    return true;
+  } catch (err: any) {
+    // Unique-constraint race on gmail_message_id → already stored; skip, don't crash.
+    if (err?.code === 'P2002') return false;
+    throw err;
+  }
 }
