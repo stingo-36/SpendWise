@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { inr, fmtDate } from '@/lib/format';
 import Icon from './Icon';
+import Select from './Select';
 
 interface Candidate {
   merchant: string;
@@ -43,6 +44,13 @@ export default function AddSubscription({
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A recurring payment (rent, EMI) is usually entered by hand with its due
+  // date; a subscription is usually picked from charges already synced.
+  const [mode, setMode] = useState<'manual' | 'pick'>(kind === 'recurring' ? 'manual' : 'pick');
+  const [name, setName] = useState('');
+  const [amount, setAmount] = useState('');
+  const [cadence, setCadence] = useState('monthly');
+  const [date, setDate] = useState('');
 
   useEffect(() => {
     fetch('/api/subscriptions/candidates')
@@ -77,6 +85,26 @@ export default function AddSubscription({
     }
   }
 
+  async function addManual() {
+    setBusy('manual');
+    setError(null);
+    try {
+      const res = await fetch('/api/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, amount: Number(amount), cadence, date, kind }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Could not add it.');
+      onAdded();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add it.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={onClose}>
       <div
@@ -86,13 +114,77 @@ export default function AddSubscription({
         <div className="flex items-center justify-between border-b border-border p-5 pb-3">
           <div>
             <h2 className="text-base font-semibold">{kind === 'recurring' ? 'Add recurring payment' : 'Add subscription'}</h2>
-            <p className="text-xs text-muted">From merchants you&rsquo;ve already paid.</p>
+            <p className="text-xs text-muted">
+              {mode === 'manual' ? 'If a synced payment matches, it’s linked — no duplicate.' : 'From merchants you’ve already paid.'}
+            </p>
           </div>
           <button onClick={onClose} aria-label="Close" className="icon-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
 
+        <div className="px-5 pt-4">
+          <div className="inline-flex w-full rounded-full border border-border bg-surface-2 p-0.5 text-sm">
+            {(
+              [
+                ['manual', 'Enter details'],
+                ['pick', 'Pick a past payment'],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => { setMode(m); setError(null); }}
+                className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 ${mode === m ? 'bg-surface font-medium shadow-sm' : 'text-muted'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {mode === 'manual' ? (
+          <div className="space-y-3 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={kind === 'recurring' ? 'Name, e.g. Home loan EMI' : 'Name, e.g. Netflix'}
+              className="input"
+            />
+            <div className="grid grid-cols-2 gap-2.5">
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                placeholder="Amount (₹)"
+                inputMode="decimal"
+                className="input tabular"
+              />
+              <Select
+                value={cadence}
+                onChange={setCadence}
+                options={[
+                  { value: 'weekly', label: 'Weekly' },
+                  { value: 'monthly', label: 'Monthly' },
+                  { value: 'quarterly', label: 'Quarterly' },
+                  { value: 'annual', label: 'Yearly' },
+                ]}
+              />
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-muted">Next due date</span>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input px-3" />
+            </label>
+            {error && <p className="text-xs font-semibold text-[rgb(var(--debit))]">{error}</p>}
+            <button
+              onClick={addManual}
+              disabled={busy !== null || !name.trim() || !(Number(amount) > 0) || !date}
+              className="btn-primary w-full"
+            >
+              {busy === 'manual' ? 'Adding…' : kind === 'recurring' ? 'Add recurring payment' : 'Add subscription'}
+            </button>
+          </div>
+        ) : (
+        <>
         <div className="p-5 pb-3">
           <input
             autoFocus
@@ -150,6 +242,8 @@ export default function AddSubscription({
             </ul>
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   );

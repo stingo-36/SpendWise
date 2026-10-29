@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     select: { id: true, merchant: true, displayLabel: true, amount: true, occurredAt: true },
   });
 
-  const tracked = new Set((await prisma.subscription.findMany({ where: { userId }, select: { merchant: true } })).map((s) => s.merchant));
+  const tracked = new Set((await prisma.subscription.findMany({ where: { userId, status: { not: 'dismissed' } }, select: { merchant: true } })).map((s) => s.merchant));
 
   const byMerchant = new Map<string, typeof txns>();
   for (const t of txns) {
