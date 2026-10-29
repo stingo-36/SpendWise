@@ -84,21 +84,12 @@ export default function SubscriptionsPage() {
     await load();
   }
 
-  async function setKind(s: Sub, kind: Sub['kind']) {
-    // Optimistic — the row moves tabs immediately.
-    setAll((prev) => prev.map((x) => (x.id === s.id ? { ...x, kind } : x)));
-    const res = await fetch(`/api/subscriptions/${s.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind }),
-    });
-    if (!res.ok) await load();
-  }
-
-  const subs = useMemo(() => (tab === 'all' ? all : all.filter((s) => s.kind === tab)), [all, tab]);
+  // Removed ones are kept server-side only so Re-detect won't bring them back.
+  const live = useMemo(() => all.filter((s) => s.status !== 'dismissed'), [all]);
+  const subs = useMemo(() => (tab === 'all' ? live : live.filter((s) => s.kind === tab)), [live, tab]);
   const counts = useMemo(
-    () => ({ all: all.length, subscription: all.filter((s) => s.kind === 'subscription').length, recurring: all.filter((s) => s.kind === 'recurring').length }),
-    [all],
+    () => ({ all: live.length, subscription: live.filter((s) => s.kind === 'subscription').length, recurring: live.filter((s) => s.kind === 'recurring').length }),
+    [live],
   );
   // Same rule as the server's normalizedMonthlyTotal, over the tab in view.
   const monthly = subs
@@ -237,7 +228,6 @@ export default function SubscriptionsPage() {
               const st = statusOf(s.status);
               const tone = CADENCE_TONE[s.cadence.toLowerCase()] ?? '#7A808A';
               const days = daysUntil(s.nextExpected);
-              const dismissed = s.status === 'dismissed';
               return (
                 <li
                   key={s.id}
@@ -252,30 +242,17 @@ export default function SubscriptionsPage() {
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <span
                       className="tile h-11 w-11 shrink-0 text-white"
-                      style={{ background: tone, opacity: dismissed ? 0.45 : 1 }}
+                      style={{ background: tone }}
                     >
                       <Icon name="repeat" size={19} />
                     </span>
                     <div className="min-w-0">
-                      <div className={`truncate text-[15px] font-extrabold ${dismissed ? 'text-muted line-through' : ''}`}>
+                      <div className="truncate text-[15px] font-extrabold">
                         {s.merchant}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-muted">
                         <span className="rounded-full px-2 py-0.5 capitalize" style={{ background: `${tone}22`, color: tone }}>
                           {s.cadence}
-                        </span>
-                        {/* Two-way switch: Subscription ↔ Recurring. */}
-                        <span className="inline-flex rounded-full border border-border bg-surface p-px">
-                          {(['subscription', 'recurring'] as const).map((k) => (
-                            <button
-                              key={k}
-                              onClick={() => s.kind !== k && setKind(s, k)}
-                              className={`rounded-full px-2 py-0.5 ${s.kind === k ? 'bg-surface-2 text-text' : 'text-muted hover:text-text'}`}
-                              title={k === 'subscription' ? 'A service you signed up for' : 'Rent, EMI, SIP or any other repeating payment'}
-                            >
-                              {k === 'subscription' ? 'Sub' : 'Recurring'}
-                            </button>
-                          ))}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Icon name="calendar" size={11} />
@@ -288,8 +265,8 @@ export default function SubscriptionsPage() {
 
                   {/* Amount + status + action */}
                   <div className="flex min-w-0 items-center justify-between gap-2 sm:shrink-0 sm:gap-3 sm:justify-end">
-                    <div className={`shrink-0 text-[15px] font-extrabold tabular ${dismissed ? 'text-muted line-through' : ''}`}>
-                      {inr(s.medianAmount)}
+                    <div className="shrink-0 text-[15px] font-extrabold tabular text-debit">
+                      −{inr(s.medianAmount)}
                     </div>
                     <span
                       className="badge badge-lg"
@@ -297,25 +274,16 @@ export default function SubscriptionsPage() {
                     >
                       <Icon name={st.icon} size={11} /> {st.label}
                     </span>
-                    {dismissed ? (
-                      <button
-                        onClick={() => setStatus(s.id, 'active')}
-                        className="icon-btn-accent"
-                        aria-label={`Restore ${s.merchant}`}
-                        title="Restore"
-                      >
-                        <Icon name="restore" size={15} />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => setStatus(s.id, 'dismissed')}
-                        className="icon-btn-danger"
-                        aria-label={`Dismiss ${s.merchant}`}
-                        title="Dismiss"
-                      >
-                        <Icon name="close" size={15} />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        if (confirm(`Remove ${s.merchant}? Re-detect won’t add it back.`)) setStatus(s.id, 'dismissed');
+                      }}
+                      className="icon-btn-danger"
+                      aria-label={`Remove ${s.merchant}`}
+                      title="Remove"
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
                   </div>
                 </li>
               );

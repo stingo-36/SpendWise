@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { normalizedMonthlyTotal, summarizeMerchant, dateOnly } from '@/lib/subscriptions';
+import { normalizedMonthlyTotal, summarizeMerchant, dateOnly, findMatchingMerchant, guessKind, CADENCE_DAYS, type Cadence } from '@/lib/subscriptions';
 import { requireUser } from '@/lib/session-server';
 
 export const runtime = 'nodejs';
@@ -36,6 +36,10 @@ export async function GET(req: NextRequest) {
  * Body: { merchant } or { transactionId }, plus optional kind
  * ('subscription' | 'recurring').
  *
+ * Or enter one by hand: { name, amount, cadence, date, kind }, where date is
+ * the next due date. If a synced payment matches it, that merchant is tracked
+ * instead (see findMatchingMerchant) — one entry, not two.
+ *
  * This is the counterpart to Re-detect: auto-detection needs three charges at a
  * steady cadence, so anything newer or irregular can only be added this way.
  */
@@ -45,6 +49,46 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   let merchant: string | null = typeof body.merchant === 'string' ? body.merchant.trim() : null;
+  const kind = body.kind === 'subscription' || body.kind === 'recurring' ? (body.kind as string) : null;
+
+  // Hand-entered: name, amount, cadence and next due date.
+  let dueDate: Date | null = null;
+  if (!merchant && typeof body.name === 'string') {
+    const name = body.name.trim();
+    const amount = Number(body.amount);
+    const cadence: Cadence = body.cadence in CADENCE_DAYS ? body.cadence : 'monthly';
+    dueDate = body.date ? new Date(body.date) : null;
+    if (!name) return NextResponse.json({ error: 'Give it a name.' }, { status: 400 });
+    if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: 'Enter the amount.' }, { status: 400 });
+    if (!dueDate || isNaN(dueDate.getTime())) return NextResponse.json({ error: 'Pick the due date.' }, { status: 400 });
+
+    merchant = await findMatchingMerchant(userId, name, amount, dueDate);
+    if (!merchant) {
+      // Nothing paid yet: track it as entered. Upsert on the name, so adding
+      // the same thing twice updates it instead of listing it twice.
+      const interval = CADENCE_DAYS[cadence];
+      const next = dateOnly(dueDate);
+      const last = dateOnly(new Date(next.getTime() - interval * 86_400_000));
+      const data = {
+        userId,
+        merchant: name.toUpperCase(),
+        medianAmount: new Prisma.Decimal(amount.toFixed(2)),
+        intervalDays: interval,
+        cadence,
+        firstSeen: last,
+        lastCharged: last,
+        nextExpected: next,
+        status: 'active',
+        kind: kind ?? guessKind(name),
+      };
+      const sub = await prisma.subscription.upsert({
+        where: { userId_merchant: { userId, merchant: data.merchant } },
+        update: data,
+        create: data,
+      });
+      return NextResponse.json({ ok: true, linked: false, subscription: { id: sub.id, merchant: sub.merchant, cadence: sub.cadence } });
+    }
+  }
 
   if (!merchant && Number.isInteger(body.transactionId)) {
     const t = await prisma.transaction.findFirst({ where: { id: body.transactionId, userId }, select: { merchant: true } });
@@ -71,13 +115,15 @@ export async function POST(req: NextRequest) {
     nextExpected: dateOnly(s.nextExpected),
     // Added deliberately, so it is active even if a past dismissal exists.
     status: 'active',
-    ...(body.kind === 'subscription' || body.kind === 'recurring' ? { kind: body.kind as string } : {}),
+    ...(kind ? { kind } : {}),
+    // A due date the user entered beats the one projected from past charges.
+    ...(dueDate && dueDate.getTime() >= Date.now() - 86_400_000 ? { nextExpected: dateOnly(dueDate) } : {}),
   };
 
   const sub = await prisma.subscription.upsert({
     where: { userId_merchant: { userId, merchant } },
     update: data,
-    create: data,
+    create: { ...data, kind: kind ?? guessKind(merchant) },
   });
 
   // Tag the charges, the same way detection does, so the subscription's history
@@ -87,5 +133,5 @@ export async function POST(req: NextRequest) {
     data: { isRecurring: true, subscriptionId: sub.id },
   });
 
-  return NextResponse.json({ ok: true, subscription: { id: sub.id, merchant: sub.merchant, cadence: sub.cadence } });
+  return NextResponse.json({ ok: true, linked: dueDate != null, subscription: { id: sub.id, merchant: sub.merchant, cadence: sub.cadence } });
 }

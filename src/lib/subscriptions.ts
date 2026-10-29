@@ -126,7 +126,12 @@ export async function detectSubscriptions(userId: number): Promise<SubDetectionR
       status,
     };
 
-    const sub = await prisma.subscription.upsert({ where: { userId_merchant: { userId, merchant } }, update: data, create: data });
+    // Kind is only guessed for new rows; an existing row keeps what it has.
+    const sub = await prisma.subscription.upsert({
+      where: { userId_merchant: { userId, merchant } },
+      update: data,
+      create: { ...data, kind: guessKind(merchant) },
+    });
     if (existing) res.updated++;
     else res.created++;
     if (status === 'price_changed') res.priceChanged++;
@@ -175,7 +180,50 @@ export function summarizeMerchant(charges: { amount: number; occurredAt: Date }[
   return { medianAmount, intervalDays, cadence, firstSeen, lastCharged, nextExpected: addDays(lastCharged, intervalDays) };
 }
 
-const CADENCE_DAYS = { weekly: 7, monthly: 30, quarterly: 91, annual: 365 } as const;
+export const CADENCE_DAYS = { weekly: 7, monthly: 30, quarterly: 91, annual: 365 } as const;
+export type Cadence = keyof typeof CADENCE_DAYS;
+
+/** Loan, investment and rent debits are recurring payments, not services. */
+const RECURRING_RE = /\b(EMI|LOAN|SIP|RENT|NACH|ACH|MANDATE|INSURANCE|PREMIUM|MUTUAL|LIC)\b/i;
+
+export function guessKind(merchant: string): 'subscription' | 'recurring' {
+  return RECURRING_RE.test(merchant) ? 'recurring' : 'subscription';
+}
+
+/**
+ * The merchant of an existing payment that a hand-entered recurring item
+ * describes, so adding "Home loan EMI · ₹15,755 · 6 Nov" links to the EMI
+ * debits already synced instead of tracking the same payment twice.
+ *
+ * A charge matches on amount (±2%) plus either a word of the name in its
+ * merchant, or a date within 3 days of the entered one. Name matches win.
+ */
+export async function findMatchingMerchant(userId: number, name: string, amount: number, date: Date): Promise<string | null> {
+  const since = new Date(Date.now() - 400 * 86_400_000);
+  const charges = await prisma.transaction.findMany({
+    where: {
+      userId,
+      direction: 'debit',
+      occurredAt: { gte: since },
+      amount: { gte: new Prisma.Decimal((amount * 0.98).toFixed(2)), lte: new Prisma.Decimal((amount * 1.02).toFixed(2)) },
+    },
+    orderBy: { occurredAt: 'desc' },
+    select: { merchant: true, rawMerchant: true, displayLabel: true, occurredAt: true },
+  });
+
+  const words = name
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter((w) => w.length >= 3);
+  const byName = charges.find((c) => {
+    const text = [c.merchant, c.rawMerchant, c.displayLabel].filter(Boolean).join(' ').toUpperCase();
+    return words.some((w) => text.includes(w));
+  });
+  if (byName) return byName.merchant;
+
+  const byDate = charges.find((c) => Math.abs(c.occurredAt.getTime() - date.getTime()) <= 3 * 86_400_000);
+  return byDate?.merchant ?? null;
+}
 
 /** Snap any gap to the closest cadence band, so nothing is left uncategorised. */
 function nearestCadence(days: number): 'weekly' | 'monthly' | 'quarterly' | 'annual' {
