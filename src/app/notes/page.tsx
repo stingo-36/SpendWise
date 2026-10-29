@@ -208,7 +208,8 @@ export default function NotesPage() {
     setBusy(false);
     if (!res.ok) return setSaveError(d.error || `Couldn’t save (${res.status})`);
     await load();
-    setDraft({ id: d.note.id, title: d.note.title, body: d.note.body, transactions: d.note.transactions });
+    // Saved — clear the editor for the next note; the saved one is in the list.
+    setDraft(EMPTY);
   }
 
   async function remove() {
