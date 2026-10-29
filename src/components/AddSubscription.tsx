@@ -30,7 +30,15 @@ const CADENCE_TONE: Record<string, string> = {
  * that way. Everything here is real spend — no typing, and the amount and
  * cadence are read off the actual charges.
  */
-export default function AddSubscription({ onAdded, onClose }: { onAdded: () => void; onClose: () => void }) {
+export default function AddSubscription({
+  onAdded,
+  onClose,
+  kind = 'subscription',
+}: {
+  onAdded: () => void;
+  onClose: () => void;
+  kind?: 'subscription' | 'recurring';
+}) {
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -56,7 +64,7 @@ export default function AddSubscription({ onAdded, onClose }: { onAdded: () => v
       const res = await fetch('/api/subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchant: c.merchant }),
+        body: JSON.stringify({ merchant: c.merchant, kind }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Could not add it.');
@@ -77,7 +85,7 @@ export default function AddSubscription({ onAdded, onClose }: { onAdded: () => v
       >
         <div className="flex items-center justify-between border-b border-border p-5 pb-3">
           <div>
-            <h2 className="text-base font-semibold">Add subscription</h2>
+            <h2 className="text-base font-semibold">{kind === 'recurring' ? 'Add recurring payment' : 'Add subscription'}</h2>
             <p className="text-xs text-muted">From merchants you&rsquo;ve already paid.</p>
           </div>
           <button onClick={onClose} aria-label="Close" className="icon-btn">
