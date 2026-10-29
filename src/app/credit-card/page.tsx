@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { inr, fmtDate } from '@/lib/format';
 import Icon from '@/components/Icon';
-import Select from '@/components/Select';
+import Select, { CategoryDropdown, type CategoryValue } from '@/components/Select';
+import { useCategories } from '@/lib/useCategories';
 import Reveal from '@/components/Reveal';
 import { categoryStyle } from '@/lib/palette';
 
@@ -21,7 +22,9 @@ interface Txn {
   direction: 'debit' | 'credit';
   label: string;
   accountLast4: string | null;
+  categoryId: number | null;
   categoryName: string | null;
+  subcategoryId: number | null;
   subcategoryName: string | null;
 }
 
@@ -62,6 +65,8 @@ export default function CreditCardPage() {
   const [label, setLabel] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const categories = useCategories();
+  const [filter, setFilter] = useState<CategoryValue>({ categoryId: null, subcategoryId: null });
 
   const load = useCallback(async (m: string) => {
     setLoading(true);
@@ -142,6 +147,19 @@ export default function CreditCardPage() {
     }
     return { byCard: m, unassigned };
   }, [txns, cards]);
+
+  // The month's card charges are all loaded already, so the category filter
+  // narrows the list in place; the headline above stays the whole month.
+  const shown = useMemo(
+    () =>
+      txns.filter(
+        (t) =>
+          (filter.categoryId == null || t.categoryId === filter.categoryId) &&
+          (filter.subcategoryId == null || t.subcategoryId === filter.subcategoryId),
+      ),
+    [txns, filter],
+  );
+  const shownNet = shown.reduce((s, t) => s + (t.direction === 'credit' ? -1 : 1) * Number(t.amount), 0);
 
   return (
     <div className="space-y-5 pt-1">
@@ -247,16 +265,41 @@ export default function CreditCardPage() {
       {/* This month's charges */}
       <Reveal delay={40}>
         <section className="card p-4 sm:p-5">
-          <h2 className="text-[15px] font-bold mb-3">Card transactions · {monthLabel(month)}</h2>
+          <div className="relative z-20 mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-[15px] font-bold">Card transactions · {monthLabel(month)}</h2>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 sm:w-64 sm:flex-none">
+                <CategoryDropdown
+                  categories={categories}
+                  value={filter}
+                  onChange={setFilter}
+                  placeholder="All categories"
+                  allowClear
+                />
+              </div>
+              {filter.categoryId != null && (
+                <button onClick={() => setFilter({ categoryId: null, subcategoryId: null })} className="btn-ghost shrink-0 gap-1.5 whitespace-nowrap px-3 py-2 text-xs">
+                  <Icon name="close" size={13} /> Clear
+                </button>
+              )}
+            </div>
+          </div>
+          {filter.categoryId != null && shown.length > 0 && (
+            <p className="mb-2 text-xs font-semibold text-muted">
+              {shown.length} transaction{shown.length === 1 ? '' : 's'} · {inr(shownNet)} net
+            </p>
+          )}
           {loading ? (
             <p className="text-sm text-muted py-6 text-center">Loading…</p>
           ) : txns.length === 0 ? (
             <p className="text-sm text-muted">
               Nothing on your cards this month. If charges are missing, check that the card’s last 4 digits are registered above.
             </p>
+          ) : shown.length === 0 ? (
+            <p className="text-sm text-muted">No card transactions in this category this month.</p>
           ) : (
             <ul className="divide-y divide-border">
-              {txns.map((t) => (
+              {shown.map((t) => (
                 <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm">
                   <span className="tile h-9 w-9 shrink-0 rounded-xl text-white" style={{ background: categoryStyle(t.categoryName, t.direction === 'debit').solid }}>
                     <Icon name={categoryStyle(t.categoryName, t.direction === 'debit').icon} size={16} />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { inr, fmtDate } from '@/lib/format';
 import Icon from '@/components/Icon';
 import Reveal from '@/components/Reveal';
@@ -16,6 +16,17 @@ interface Sub {
   lastCharged: string;
   nextExpected: string;
   status: string;
+  kind: 'subscription' | 'recurring';
+}
+
+type Tab = 'all' | 'subscription' | 'recurring';
+
+/** Monthly equivalent (§9): annual ÷ 12, quarterly ÷ 3, everything else as-is. */
+function monthlyOf(s: Sub): number {
+  const amt = Number(s.medianAmount);
+  if (s.cadence === 'annual') return amt / 12;
+  if (s.cadence === 'quarterly') return amt / 3;
+  return amt;
 }
 
 /** Each status gets a ground, a label colour and a glyph — not just grey text. */
@@ -39,8 +50,8 @@ const CADENCE_TONE: Record<string, string> = {
 };
 
 export default function SubscriptionsPage() {
-  const [subs, setSubs] = useState<Sub[]>([]);
-  const [monthly, setMonthly] = useState(0);
+  const [all, setAll] = useState<Sub[]>([]);
+  const [tab, setTab] = useState<Tab>('all');
   const [loading, setLoading] = useState(true);
   const [detecting, setDetecting] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -49,8 +60,7 @@ export default function SubscriptionsPage() {
     setLoading(true);
     const res = await fetch('/api/subscriptions');
     const data = await res.json();
-    setSubs(data.subscriptions);
-    setMonthly(data.normalizedMonthlyTotal);
+    setAll(data.subscriptions);
     setLoading(false);
   }, []);
 
@@ -74,6 +84,28 @@ export default function SubscriptionsPage() {
     await load();
   }
 
+  async function setKind(s: Sub, kind: Sub['kind']) {
+    // Optimistic — the row moves tabs immediately.
+    setAll((prev) => prev.map((x) => (x.id === s.id ? { ...x, kind } : x)));
+    const res = await fetch(`/api/subscriptions/${s.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind }),
+    });
+    if (!res.ok) await load();
+  }
+
+  const subs = useMemo(() => (tab === 'all' ? all : all.filter((s) => s.kind === tab)), [all, tab]);
+  const counts = useMemo(
+    () => ({ all: all.length, subscription: all.filter((s) => s.kind === 'subscription').length, recurring: all.filter((s) => s.kind === 'recurring').length }),
+    [all],
+  );
+  // Same rule as the server's normalizedMonthlyTotal, over the tab in view.
+  const monthly = subs
+    .filter((s) => s.status === 'active' || s.status === 'price_changed')
+    .reduce((t, s) => t + monthlyOf(s), 0);
+  const noun = tab === 'recurring' ? 'recurring payment' : tab === 'subscription' ? 'subscription' : 'recurring item';
+
   const soon = subs.filter(
     (s) => s.status !== 'dismissed' && s.status !== 'stopped' && daysUntil(s.nextExpected) <= 7 && daysUntil(s.nextExpected) >= 0,
   );
@@ -82,11 +114,11 @@ export default function SubscriptionsPage() {
 
   return (
     <div className="space-y-5 pt-1">
-      {adding && <AddSubscription onAdded={load} onClose={() => setAdding(false)} />}
+      {adding && <AddSubscription kind={tab === 'recurring' ? 'recurring' : 'subscription'} onAdded={load} onClose={() => setAdding(false)} />}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="h-page">Subscriptions</h1>
-          <p className="text-sm text-muted">Recurring payments detected from your history.</p>
+          <p className="text-sm text-muted">Subscriptions and other recurring payments (rent, EMI, SIP) from your history.</p>
         </div>
         {/* Each button keeps its label on one line and takes an equal share of
             a narrow row; at 320px the pair used to break mid-word. */}
@@ -98,7 +130,7 @@ export default function SubscriptionsPage() {
             <Icon name="plus" size={15} />
             {/* One span, so the flex gap doesn't double up with JSX's own
                 whitespace between "Add" and the conditional word. */}
-            <span>Add<span className="hidden min-[360px]:inline"> subscription</span></span>
+            <span>Add<span className="hidden min-[360px]:inline"> {tab === 'recurring' ? 'recurring' : 'subscription'}</span></span>
           </button>
           <button onClick={detect} disabled={detecting} className="btn-primary flex-1 whitespace-nowrap px-4 py-2 sm:flex-none">
             <Icon name="repeat" size={15} /> {detecting ? 'Detecting…' : 'Re-detect'}
@@ -106,13 +138,34 @@ export default function SubscriptionsPage() {
         </div>
       </header>
 
+      {/* Subscriptions are services you signed up for; recurring is any other
+          repeating payment. Detection can't tell them apart, so each row has
+          a switch and new detections start as subscriptions. */}
+      <div className="inline-flex w-full rounded-full border border-border bg-surface-2 p-0.5 text-sm sm:w-auto">
+        {(
+          [
+            ['all', 'All'],
+            ['subscription', 'Subscriptions'],
+            ['recurring', 'Recurring'],
+          ] as [Tab, string][]
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setTab(value)}
+            className={`flex-1 whitespace-nowrap rounded-full px-3.5 py-1.5 sm:flex-none ${tab === value ? 'bg-surface font-medium shadow-sm' : 'text-muted'}`}
+          >
+            {label} <span className="text-xs text-muted tabular">{counts[value]}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Headline: normalized monthly total, plus the two counts worth knowing. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="card-hero animate-pop p-4 sm:p-5 sm:col-span-2">
           <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-white/[0.07]" aria-hidden />
           <div className="relative flex items-center justify-between">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-white/70 sm:text-xs">
-              Normalized monthly recurring spend
+              Normalized monthly {tab === 'subscription' ? 'subscription' : 'recurring'} spend
             </div>
             <span className="tile h-9 w-9 bg-white/15 text-white"><Icon name="repeat" size={16} /></span>
           </div>
@@ -129,7 +182,7 @@ export default function SubscriptionsPage() {
           </div>
           <div className="mt-2 text-[28px] font-extrabold leading-tight tabular">{activeCount}</div>
           <div className="mt-1 text-xs font-semibold text-[rgb(var(--credit))]">
-            {soon.length > 0 ? `${soon.length} due within 7 days` : 'active subscriptions'}
+            {soon.length > 0 ? `${soon.length} due within 7 days` : `active ${noun}s`}
           </div>
         </div>
       </div>
@@ -165,10 +218,16 @@ export default function SubscriptionsPage() {
       ) : subs.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-border py-12 text-center">
           <span className="tile mx-auto mb-3 h-12 w-12 bg-surface-2 text-muted"><Icon name="repeat" size={22} /></span>
-          <p className="text-sm font-semibold">No subscriptions detected yet.</p>
-          <p className="mt-1 text-sm text-muted">Run “Re-detect” after syncing, or add one yourself.</p>
+          <p className="text-sm font-semibold">
+            {tab === 'recurring' ? 'No recurring payments yet.' : tab === 'subscription' ? 'No subscriptions yet.' : 'No subscriptions detected yet.'}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {tab === 'recurring'
+              ? 'Move one here with its “Recurring” switch, or add one yourself.'
+              : 'Run “Re-detect” after syncing, or add one yourself.'}
+          </p>
           <button onClick={() => setAdding(true)} className="btn-primary mx-auto mt-4">
-            + Add subscription
+            + Add {tab === 'recurring' ? 'recurring payment' : 'subscription'}
           </button>
         </div>
       ) : (
@@ -204,6 +263,19 @@ export default function SubscriptionsPage() {
                       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-muted">
                         <span className="rounded-full px-2 py-0.5 capitalize" style={{ background: `${tone}22`, color: tone }}>
                           {s.cadence}
+                        </span>
+                        {/* Two-way switch: Subscription ↔ Recurring. */}
+                        <span className="inline-flex rounded-full border border-border bg-surface p-px">
+                          {(['subscription', 'recurring'] as const).map((k) => (
+                            <button
+                              key={k}
+                              onClick={() => s.kind !== k && setKind(s, k)}
+                              className={`rounded-full px-2 py-0.5 ${s.kind === k ? 'bg-surface-2 text-text' : 'text-muted hover:text-text'}`}
+                              title={k === 'subscription' ? 'A service you signed up for' : 'Rent, EMI, SIP or any other repeating payment'}
+                            >
+                              {k === 'subscription' ? 'Sub' : 'Recurring'}
+                            </button>
+                          ))}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Icon name="calendar" size={11} />

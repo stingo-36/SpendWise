@@ -87,7 +87,10 @@ export default function TransactionsPage() {
   // filters
   const [merchant, setMerchant] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [subcategoryId, setSubcategoryId] = useState('');
   const [direction, setDirection] = useState('');
+  // '' = everything, 'bank' = account money only, 'card' = credit-card charges only.
+  const [source, setSource] = useState('');
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState('');
 
@@ -96,7 +99,9 @@ export default function TransactionsPage() {
     const p = new URLSearchParams({ page: String(page), pageSize: '100' });
     if (merchant) p.set('merchant', merchant);
     if (categoryId) p.set('categoryId', categoryId);
+    if (subcategoryId) p.set('subcategoryId', subcategoryId);
     if (direction) p.set('direction', direction);
+    if (source) p.set('creditCard', source === 'card' ? '1' : '0');
     if (from) p.set('from', from);
     if (to) p.set('to', to);
     const res = await fetch(`/api/transactions?${p}`);
@@ -104,7 +109,7 @@ export default function TransactionsPage() {
     setItems(data.items);
     setTotal(data.total);
     setLoading(false);
-  }, [page, merchant, categoryId, direction, from, to]);
+  }, [page, merchant, categoryId, subcategoryId, direction, source, from, to]);
 
   const loadDeleted = useCallback(async () => {
     setDeletedLoading(true);
@@ -272,8 +277,12 @@ export default function TransactionsPage() {
           <div className="lg:w-52">
             <CategoryDropdown
               categories={categories}
-              value={{ categoryId: categoryId ? Number(categoryId) : null, subcategoryId: null }}
-              onChange={(v) => { setPage(1); setCategoryId(v.categoryId ? String(v.categoryId) : ''); }}
+              value={{ categoryId: categoryId ? Number(categoryId) : null, subcategoryId: subcategoryId ? Number(subcategoryId) : null }}
+              onChange={(v) => {
+                setPage(1);
+                setCategoryId(v.categoryId ? String(v.categoryId) : '');
+                setSubcategoryId(v.subcategoryId ? String(v.subcategoryId) : '');
+              }}
               placeholder="All categories"
               allowClear
             />
@@ -290,6 +299,18 @@ export default function TransactionsPage() {
               ]}
             />
           </div>
+          <div className="lg:w-48">
+            <Select
+              value={source}
+              onChange={(v) => { setPage(1); setSource(v); }}
+              placeholder="Bank & card"
+              options={[
+                { value: '', label: 'Bank & card', icon: 'wallet' },
+                { value: 'bank', label: 'Bank account only', icon: 'wallet', tone: '#3D7FC1' },
+                { value: 'card', label: 'Credit card only', icon: 'creditcard', tone: '#E0813C' },
+              ]}
+            />
+          </div>
           {/* Two date fields side by side leave ~140px each below 360px, and
               a native date input clips its own value at that width — the
               picker glyph is drawn inside the box. Stack them until there is
@@ -298,9 +319,9 @@ export default function TransactionsPage() {
             <input type="date" value={from} onChange={(e) => { setPage(1); setFrom(e.target.value); }} className="input px-3 lg:w-40" aria-label="From date" />
             <input type="date" value={to} onChange={(e) => { setPage(1); setTo(e.target.value); }} className="input px-3 lg:w-40" aria-label="To date" />
           </div>
-          {(merchant || categoryId || direction || from || to) && (
+          {(merchant || categoryId || direction || source || from || to) && (
             <button
-              onClick={() => { setPage(1); setMerchant(''); setCategoryId(''); setDirection(''); setFrom(''); setTo(''); }}
+              onClick={() => { setPage(1); setMerchant(''); setCategoryId(''); setSubcategoryId(''); setDirection(''); setSource(''); setFrom(''); setTo(''); }}
               className="btn-ghost shrink-0 gap-1.5 whitespace-nowrap px-3 py-2 text-xs"
             >
               <Icon name="close" size={13} /> Clear filters

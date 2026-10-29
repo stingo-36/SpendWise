@@ -197,6 +197,10 @@ model Subscription {
   lastCharged   DateTime @map("last_charged") @db.Date
   nextExpected  DateTime @map("next_expected") @db.Date
   status        String   @default("active")
+  /// 'subscription' (a service you signed up for: Netflix, Claude) or
+  /// 'recurring' (any other repeating payment: rent, EMI, SIP). Detection
+  /// never sets it, so the user's choice survives a Re-detect.
+  kind          String   @default("subscription")
   createdAt     DateTime @default(now()) @map("created_at")
 
   transactions Transaction[]

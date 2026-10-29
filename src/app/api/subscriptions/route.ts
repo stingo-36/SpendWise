@@ -26,13 +26,15 @@ export async function GET(req: NextRequest) {
       lastCharged: s.lastCharged.toISOString().slice(0, 10),
       nextExpected: s.nextExpected.toISOString().slice(0, 10),
       status: s.status,
+      kind: s.kind,
     })),
   });
 }
 
 /**
  * Track a merchant as a subscription by hand, built from its real charges.
- * Body: { merchant } or { transactionId }.
+ * Body: { merchant } or { transactionId }, plus optional kind
+ * ('subscription' | 'recurring').
  *
  * This is the counterpart to Re-detect: auto-detection needs three charges at a
  * steady cadence, so anything newer or irregular can only be added this way.
@@ -69,6 +71,7 @@ export async function POST(req: NextRequest) {
     nextExpected: dateOnly(s.nextExpected),
     // Added deliberately, so it is active even if a past dismissal exists.
     status: 'active',
+    ...(body.kind === 'subscription' || body.kind === 'recurring' ? { kind: body.kind as string } : {}),
   };
 
   const sub = await prisma.subscription.upsert({

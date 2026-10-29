@@ -49,7 +49,8 @@ export async function POST(req: NextRequest) {
 
 /**
  * Filterable transaction list (spec §10 view 2). Query params:
- *   from, to (ISO date), categoryId, merchant (contains), direction,
+ *   from, to (ISO date), categoryId, subcategoryId, merchant (contains), direction,
+ *   creditCard (1 = card charges, 0 = bank account),
  *   minAmount, maxAmount, reviewQueue=1 (uncategorized/low-confidence),
  *   page, pageSize.
  */
@@ -69,6 +70,8 @@ export async function GET(req: NextRequest) {
 
   const categoryId = sp.get('categoryId');
   if (categoryId) where.categoryId = Number(categoryId);
+  const subcategoryId = sp.get('subcategoryId');
+  if (subcategoryId) where.subcategoryId = Number(subcategoryId);
 
   const merchant = sp.get('merchant');
   if (merchant) where.merchant = { contains: merchant, mode: 'insensitive' };
