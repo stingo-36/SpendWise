@@ -64,12 +64,13 @@ async function findDuplicate(userId: number, txn: ParsedTxn) {
 
 /**
  * True when the user has already deleted this transaction. Uses the same
- * fingerprint as findDuplicate so a second alert for a deleted purchase — or a
- * re-parse of the mailbox — cannot bring it back.
+ * fingerprint as findDuplicate — including the auto-debit pairing, whose
+ * second alert can arrive hours later — so a sibling alert for a deleted
+ * purchase, or a re-parse of the mailbox, cannot bring it back.
  */
 async function wasDeleted(userId: number, txn: ParsedTxn) {
-  const lo = new Date(txn.occurredAt.getTime() - DEDUPE_WINDOW_MS);
-  const hi = new Date(txn.occurredAt.getTime() + DEDUPE_WINDOW_MS);
+  const lo = new Date(txn.occurredAt.getTime() - AUTO_DEBIT_WINDOW_MS);
+  const hi = new Date(txn.occurredAt.getTime() + AUTO_DEBIT_WINDOW_MS);
 
   const tombstones = await prisma.deletedTransaction.findMany({
     where: {
@@ -80,7 +81,32 @@ async function wasDeleted(userId: number, txn: ParsedTxn) {
     },
   });
 
-  return tombstones.some((t) => !(txn.accountLast4 && t.accountLast4 && txn.accountLast4 !== t.accountLast4));
+  const parsed = {
+    instrument: txn.instrument,
+    occurredAt: txn.occurredAt,
+    rawMerchant: txn.rawMerchant,
+    merchant: normalizeMerchant(txn.rawMerchant),
+    displayLabel: null,
+  };
+
+  return tombstones.some((t) => {
+    if (txn.accountLast4 && t.accountLast4 && txn.accountLast4 !== t.accountLast4) return false;
+    const gap = Math.abs(txn.occurredAt.getTime() - t.occurredAt.getTime());
+    if (gap <= DEDUPE_WINDOW_MS) return true;
+    // The snapshot holds what the deleted row looked like, which the
+    // auto-debit match needs (instrument and merchant text).
+    const snap = (t.snapshot ?? {}) as Record<string, unknown>;
+    return isMatchingAutoDebitAlert(
+      {
+        instrument: (snap.instrument as string) ?? 'unknown',
+        occurredAt: t.occurredAt,
+        rawMerchant: (snap.rawMerchant as string) ?? t.merchant,
+        merchant: t.merchant,
+        displayLabel: (snap.displayLabel as string | null) ?? null,
+      },
+      parsed,
+    );
+  });
 }
 
 /** A richer merchant string is simply the longer, more descriptive one. */
