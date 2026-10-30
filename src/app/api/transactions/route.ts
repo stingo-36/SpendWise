@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/session-server';
+import { ensureCardBillCategory } from '@/lib/cardBill';
 
 export const runtime = 'nodejs';
 
 /**
  * Manually add a transaction (income or expense). Body:
  *   { direction: 'credit'|'debit', amount, occurredAt (ISO date), description,
- *     categoryId?, subcategoryId?, notes? }
+ *     categoryId?, subcategoryId?, notes?, kind?: 'cardBill', cardLast4? }
  * Stored as source='manual' and locked so the categorizer never overwrites it.
  */
 export async function POST(req: NextRequest) {
@@ -19,12 +20,29 @@ export async function POST(req: NextRequest) {
   const amount = Number(body.amount);
   if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: 'amount must be a positive number' }, { status: 400 });
 
-  const description = String(body.description ?? '').trim() || (direction === 'credit' ? 'Income' : 'Expense');
   const occurredAt = body.occurredAt ? new Date(body.occurredAt) : new Date();
   if (isNaN(occurredAt.getTime())) return NextResponse.json({ error: 'invalid date' }, { status: 400 });
 
-  const categoryId = body.categoryId != null && body.categoryId !== '' ? Number(body.categoryId) : null;
-  const subcategoryId = body.subcategoryId != null && body.subcategoryId !== '' ? Number(body.subcategoryId) : null;
+  let categoryId = body.categoryId != null && body.categoryId !== '' ? Number(body.categoryId) : null;
+  let subcategoryId = body.subcategoryId != null && body.subcategoryId !== '' ? Number(body.subcategoryId) : null;
+
+  // kind=cardBill: paying a credit card bill from the account. Filed under
+  // Transfers › Credit card bill so it lowers the balance without counting
+  // the card's charges as spend a second time.
+  const isCardBill = body.kind === 'cardBill';
+  let accountLast4: string | null = null;
+  if (isCardBill) {
+    if (direction !== 'debit') return NextResponse.json({ error: 'a card bill payment is money out' }, { status: 400 });
+    const ids = await ensureCardBillCategory();
+    if (!ids) return NextResponse.json({ error: 'Transfers category is missing — run the seed' }, { status: 500 });
+    ({ categoryId, subcategoryId } = ids);
+    if (body.cardLast4 != null && body.cardLast4 !== '') {
+      accountLast4 = String(body.cardLast4);
+      if (!/^\d{4}$/.test(accountLast4)) return NextResponse.json({ error: 'cardLast4 must be 4 digits' }, { status: 400 });
+    }
+  }
+  const fallback = isCardBill ? 'Credit card bill' : direction === 'credit' ? 'Income' : 'Expense';
+  const description = String(body.description ?? '').trim() || fallback;
 
   const txn = await prisma.transaction.create({
     data: {
@@ -36,6 +54,7 @@ export async function POST(req: NextRequest) {
       rawMerchant: description,
       merchant: description.toUpperCase(),
       displayLabel: description,
+      accountLast4,
       instrument: 'unknown',
       categoryId,
       subcategoryId,

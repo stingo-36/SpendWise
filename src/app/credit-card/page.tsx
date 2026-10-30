@@ -7,6 +7,7 @@ import Select, { CategoryDropdown, type CategoryValue } from '@/components/Selec
 import { useCategories } from '@/lib/useCategories';
 import Reveal from '@/components/Reveal';
 import { categoryStyle } from '@/lib/palette';
+import { DEFAULT_STATEMENT_DAY, MAX_STATEMENT_DAY, recentCycles } from '@/lib/billingCycle';
 
 interface Card {
   id: number;
@@ -28,36 +29,15 @@ interface Txn {
   subcategoryName: string | null;
 }
 
-function monthOptions(): string[] {
-  const out: string[] = [];
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth();
-  for (let i = 0; i < 12; i++) {
-    out.push(`${y}-${String(m + 1).padStart(2, '0')}`);
-    m--;
-    if (m < 0) {
-      m = 11;
-      y--;
-    }
-  }
-  return out;
-}
-
-function monthLabel(m: string): string {
-  const [y, mo] = m.split('-').map(Number);
-  return new Date(y, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-}
-
-function monthRange(m: string): { from: string; to: string } {
-  const [y, mo] = m.split('-').map(Number);
-  const last = new Date(y, mo, 0).getDate();
-  return { from: `${m}-01`, to: `${m}-${String(last).padStart(2, '0')}` };
-}
+const ordinal = (n: number) => `${n}${[11, 12, 13].includes(n % 100) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
 export default function CreditCardPage() {
-  const months = monthOptions();
-  const [month, setMonth] = useState(months[0]);
+  // Card spend follows the billing cycle (statement day D: D+1 … D), not the
+  // calendar month. Index 0 is the open cycle the next bill will cover.
+  const [statementDay, setStatementDay] = useState(DEFAULT_STATEMENT_DAY);
+  const cycles = useMemo(() => recentCycles(statementDay, 12), [statementDay]);
+  const [cycleIdx, setCycleIdx] = useState(0);
+  const cycle = cycles[cycleIdx] ?? cycles[0];
   const [cards, setCards] = useState<Card[]>([]);
   const [txns, setTxns] = useState<Txn[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,15 +48,16 @@ export default function CreditCardPage() {
   const categories = useCategories();
   const [filter, setFilter] = useState<CategoryValue>({ categoryId: null, subcategoryId: null });
 
-  const load = useCallback(async (m: string) => {
+  const loadCards = useCallback(async () => {
+    const c = await fetch('/api/credit-cards', { cache: 'no-store' }).then((r) => r.json());
+    setCards(c.cards ?? []);
+    if (c.statementDay) setStatementDay(c.statementDay);
+  }, []);
+
+  const loadTxns = useCallback(async (from: string, to: string) => {
     setLoading(true);
     try {
-      const { from, to } = monthRange(m);
-      const [c, t] = await Promise.all([
-        fetch('/api/credit-cards', { cache: 'no-store' }).then((r) => r.json()),
-        fetch(`/api/transactions?creditCard=1&from=${from}&to=${to}&pageSize=200`).then((r) => r.json()),
-      ]);
-      setCards(c.cards ?? []);
+      const t = await fetch(`/api/transactions?creditCard=1&from=${from}&to=${to}&pageSize=200`).then((r) => r.json());
       setTxns(t.items ?? []);
     } finally {
       setLoading(false);
@@ -84,8 +65,24 @@ export default function CreditCardPage() {
   }, []);
 
   useEffect(() => {
-    load(month);
-  }, [month, load]);
+    loadCards();
+  }, [loadCards]);
+  useEffect(() => {
+    loadTxns(cycle.from, cycle.to);
+  }, [cycle.from, cycle.to, loadTxns]);
+
+  const reload = () => Promise.all([loadCards(), loadTxns(cycle.from, cycle.to)]);
+
+  async function changeStatementDay(v: string) {
+    const day = Number(v);
+    setStatementDay(day);
+    setCycleIdx(0);
+    await fetch('/api/credit-cards', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ statementDay: day }),
+    });
+  }
 
   async function addCard() {
     setBusy(true);
@@ -101,7 +98,7 @@ export default function CreditCardPage() {
       setLast4('');
       setLabel('');
       setMsg(d.reclassified > 0 ? `Added — ${d.reclassified} past transaction${d.reclassified === 1 ? '' : 's'} moved to this card.` : 'Added.');
-      await load(month);
+      await reload();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Could not add the card');
     } finally {
@@ -112,10 +109,10 @@ export default function CreditCardPage() {
   async function removeCard(c: Card) {
     if (!confirm(`Remove ${c.label}? Its ${c.txnCount} transaction(s) go back to counting as account spend.`)) return;
     await fetch(`/api/credit-cards?id=${c.id}`, { method: 'DELETE' });
-    await load(month);
+    await reload();
   }
 
-  // Charges minus refunds — what this month added to the card balance.
+  // Charges minus refunds — what this cycle added to the card balance.
   const { charges, refunds } = useMemo(() => {
     let charges = 0;
     let refunds = 0;
@@ -148,8 +145,8 @@ export default function CreditCardPage() {
     return { byCard: m, unassigned };
   }, [txns, cards]);
 
-  // The month's card charges are all loaded already, so the category filter
-  // narrows the list in place; the headline above stays the whole month.
+  // The cycle's card charges are all loaded already, so the category filter
+  // narrows the list in place; the headline above stays the whole cycle.
   const shown = useMemo(
     () =>
       txns.filter(
@@ -169,24 +166,31 @@ export default function CreditCardPage() {
           <p className="text-sm text-muted">Card charges count as spend but don’t leave your account until you pay the bill.</p>
         </div>
         <Select
-          value={month}
-          options={months.map((m) => ({ value: m, label: monthLabel(m), icon: 'calendar' }))}
-          onChange={setMonth}
+          value={String(cycleIdx)}
+          options={cycles.map((c, i) => ({
+            value: String(i),
+            label: c.label,
+            hint: i === 0 ? 'Current cycle' : `Billed ${c.statementDate.getFullYear()}`,
+            icon: 'calendar',
+          }))}
+          onChange={(v) => setCycleIdx(Number(v))}
           align="right"
-          className="!w-auto min-w-[11rem] rounded-full"
+          className="!w-auto min-w-[12rem] rounded-full"
         />
       </header>
 
-      {/* Headline: what went on the card this month */}
+      {/* Headline: what went on the card this cycle */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card-hero animate-pop p-4 sm:p-5 sm:col-span-2">
           <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/[0.07]" aria-hidden />
           <div className="relative flex items-center justify-between">
-            <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide text-white/70">Charged this month</div>
+            <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide text-white/70">Charged this cycle</div>
             <span className="tile h-9 w-9 bg-white/15 text-white"><Icon name="wallet" size={16} /></span>
           </div>
           <div className="relative mt-2 text-[28px] leading-tight font-extrabold tabular">{inr(charges)}</div>
           <div className="relative mt-1 text-xs font-medium text-white/70">
+            {cycle.label} · {cycleIdx === 0 ? 'bill on' : 'billed'} {cycle.statementDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+            {' · '}
             {refunds > 0 ? `${inr(refunds)} refunded · net ${inr(charges - refunds)}` : `${txns.length} transaction${txns.length === 1 ? '' : 's'}`}
           </div>
         </div>
@@ -234,10 +238,22 @@ export default function CreditCardPage() {
           {unassigned > 0 && (
             <div className="flex items-center gap-2.5 rounded-2xl bg-sand px-4 py-3 text-xs font-semibold text-[rgb(var(--amber-2))]">
               <Icon name="alert" size={15} className="shrink-0" />
-              {inr(unassigned)} of this month’s card spend isn’t tied to a card number — those charges were flagged by hand or
+              {inr(unassigned)} of this cycle’s card spend isn’t tied to a card number — those charges were flagged by hand or
               arrived without one. Open the transaction and set its card, or keep just one card registered.
             </div>
           )}
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4 text-sm">
+            <span className="font-semibold">Bill generates on the</span>
+            <Select
+              value={String(statementDay)}
+              options={Array.from({ length: MAX_STATEMENT_DAY }, (_, i) => ({ value: String(i + 1), label: ordinal(i + 1) }))}
+              onChange={changeStatementDay}
+              className="!w-auto min-w-[6rem]"
+              width="8rem"
+            />
+            <span className="text-muted">of every month — each cycle runs from the day after through that day.</span>
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-2 border-t border-border pt-4">
             <input
@@ -262,11 +278,11 @@ export default function CreditCardPage() {
         </section>
       </Reveal>
 
-      {/* This month's charges */}
+      {/* This cycle's charges */}
       <Reveal delay={40}>
         <section className="card p-4 sm:p-5">
           <div className="relative z-20 mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-[15px] font-bold">Card transactions · {monthLabel(month)}</h2>
+            <h2 className="text-[15px] font-bold">Card transactions · {cycle.label}</h2>
             <div className="flex items-center gap-2">
               <div className="flex-1 sm:w-64 sm:flex-none">
                 <CategoryDropdown
@@ -293,10 +309,10 @@ export default function CreditCardPage() {
             <p className="text-sm text-muted py-6 text-center">Loading…</p>
           ) : txns.length === 0 ? (
             <p className="text-sm text-muted">
-              Nothing on your cards this month. If charges are missing, check that the card’s last 4 digits are registered above.
+              Nothing on your cards this cycle. If charges are missing, check that the card’s last 4 digits are registered above.
             </p>
           ) : shown.length === 0 ? (
-            <p className="text-sm text-muted">No card transactions in this category this month.</p>
+            <p className="text-sm text-muted">No card transactions in this category this cycle.</p>
           ) : (
             <ul className="divide-y divide-border">
               {shown.map((t) => (

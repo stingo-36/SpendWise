@@ -21,6 +21,9 @@ interface Overview {
   prevMonthSpend: number;
   accountOutflow: number;
   creditCardSpend: number;
+  cardBillPaid: number;
+  cardOutstanding: number;
+  cardCycle: { from: string; to: string; label: string; statementDate: string; charged: number };
   deltaPct: number | null;
   categoryBreakdown: { categoryId: number | null; categoryName: string; amount: number }[];
   incomeBreakdown: { categoryId: number | null; categoryName: string; amount: number }[];
@@ -44,6 +47,12 @@ function monthOptions(): string[] {
     }
   }
   return out;
+}
+
+/** "2026-11-15" → "15 Nov" */
+function fmtDay(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
 function monthLabel(m: string): string {
@@ -123,10 +132,24 @@ export default function OverviewPage() {
               tone={leftInAccount >= 0 ? 'sand' : 'blush'}
               delay={140}
             >
-              <span>money in − money out of account</span>
+              <span>
+                money in − money out of account
+                {data.cardBillPaid > 0 && ` · incl. ${inr(data.cardBillPaid)} card bill`}
+              </span>
             </KpiCard>
-            <KpiCard label="Credit card used" value={inr(data.creditCardSpend)} icon="creditcard" tone="sky" delay={210}>
-              <a href="/credit-card" className="underline decoration-current/40">charged this month, not yet paid →</a>
+            {/* Follows the card's billing cycle, not the calendar month — this
+                is what's heading for the next bill. */}
+            <KpiCard label="Credit card used" value={inr(data.cardCycle.charged)} icon="creditcard" tone="sky" delay={210}>
+              <span className="block">
+                {data.cardCycle.label} · bill on {fmtDay(data.cardCycle.statementDate)}
+              </span>
+              {/* Bill payments come out of the account (so they're already in
+                  Balance remaining); here they show against what's owed. */}
+              <a href="/credit-card" className="underline decoration-current/40">
+                {data.cardBillPaid > 0
+                  ? `${inr(data.cardBillPaid)} bill paid · ${data.cardOutstanding > 0 ? `${inr(data.cardOutstanding)} still due` : 'all cleared'} →`
+                  : 'not yet paid →'}
+              </a>
             </KpiCard>
           </div>
 

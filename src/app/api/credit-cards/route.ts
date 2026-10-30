@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/session-server';
-import { addCreditCard, listCreditCards, removeCreditCard } from '@/lib/creditCards';
+import { addCreditCard, getStatementDay, listCreditCards, removeCreditCard, setStatementDay } from '@/lib/creditCards';
 
 export const runtime = 'nodejs';
 
-/** GET: this user's registered credit cards. */
+/** GET: this user's registered credit cards and the day their bill is generated. */
 export async function GET(req: NextRequest) {
   const userId = await requireUser(req);
   if (userId instanceof NextResponse) return userId;
-  return NextResponse.json({ cards: await listCreditCards(userId) });
+  const [cards, statementDay] = await Promise.all([listCreditCards(userId), getStatementDay(userId)]);
+  return NextResponse.json({ cards, statementDay });
+}
+
+/** PATCH { statementDay }: the day of the month (1–28) the bill is generated. */
+export async function PATCH(req: NextRequest) {
+  const userId = await requireUser(req);
+  if (userId instanceof NextResponse) return userId;
+  const body = await req.json().catch(() => ({}));
+  if (body.statementDay == null) return NextResponse.json({ error: 'statementDay required' }, { status: 400 });
+  return NextResponse.json({ ok: true, statementDay: await setStatementDay(userId, body.statementDay) });
 }
 
 /** POST { last4, label }: register a card and retro-flag its past transactions. */

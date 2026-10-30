@@ -435,6 +435,14 @@ export default function TransactionsPage() {
                               <Icon name="creditcard" size={13} style={{ color: '#8095F2' }} /> Credit card
                             </span>
                           )}
+                          {!t.isCreditCard && t.direction === 'debit' && t.subcategoryName === 'Credit card bill' && (
+                            <span
+                              className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-bold"
+                              style={{ color: '#2F6B4F', boxShadow: 'inset 0 0 0 1px #4CAF8240, 0 1px 2px rgb(26 28 31 / 0.06)' }}
+                            >
+                              <Icon name="check" size={13} style={{ color: '#4CAF82' }} /> Card bill paid
+                            </span>
+                          )}
                           {t.isRecurring && (
                             <span
                               className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-bold"

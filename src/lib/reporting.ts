@@ -8,6 +8,9 @@
  * Only debits count as spend.
  */
 import { prisma } from './db';
+import { cardBillSubcategoryId } from './cardBill';
+import { cycleContaining } from './billingCycle';
+import { getStatementDay } from './creditCards';
 
 export interface CategoryBreakdownItem {
   categoryId: number | null;
@@ -23,6 +26,10 @@ export interface MonthlyOverview {
   allMoneyOut: number; // all debits (the "all money movement" view, §8.1)
   accountOutflow: number; // debits that actually left the bank account
   creditCardSpend: number; // is_expense debits charged to a registered credit card
+  cardBillPaid: number; // account debits filed as Transfers › Credit card bill this month
+  cardOutstanding: number; // card charges − refunds − bill payments, all time up to month end (floored at 0)
+  /** The billing cycle open at month end (or today, for the current month) and what's been charged in it. */
+  cardCycle: { from: string; to: string; label: string; statementDate: string; charged: number };
   prevMonthSpend: number;
   deltaPct: number | null;
   categoryBreakdown: CategoryBreakdownItem[];
@@ -65,6 +72,49 @@ async function selfTransferCategoryIds(): Promise<Set<number>> {
   });
   if (!root) return new Set();
   return new Set(root.children.filter((c) => /to self/i.test(c.name)).map((c) => c.id));
+}
+
+/**
+ * What's still owed on the cards as of `before`: every card charge minus card
+ * refunds minus every bill payment, across all time — a bill usually pays the
+ * previous month's charges, so a single month can't be netted on its own.
+ * Floored at 0: payments for charges made before tracking began would
+ * otherwise read as the bank owing you.
+ */
+async function cardOutstandingAt(userId: number, before: Date, cardBillId: number | null): Promise<number> {
+  const [charged, refunded, paid] = await Promise.all([
+    prisma.transaction.aggregate({ _sum: { amount: true }, where: { userId, isCreditCard: true, direction: 'debit', occurredAt: { lt: before } } }),
+    prisma.transaction.aggregate({ _sum: { amount: true }, where: { userId, isCreditCard: true, direction: 'credit', occurredAt: { lt: before } } }),
+    cardBillId == null
+      ? Promise.resolve({ _sum: { amount: null } })
+      : prisma.transaction.aggregate({
+          _sum: { amount: true },
+          where: { userId, isCreditCard: false, direction: 'debit', subcategoryId: cardBillId, occurredAt: { lt: before } },
+        }),
+  ]);
+  const owed = Number(charged._sum.amount ?? 0) - Number(refunded._sum.amount ?? 0) - Number(paid._sum.amount ?? 0);
+  return Math.max(0, owed);
+}
+
+/**
+ * The card cycle to show for a month: the one open today for the current
+ * month, else the one open on the month's last day — i.e. the bill that
+ * month's later charges are heading for.
+ */
+async function cardCycleFor(userId: number, monthEnd: Date): Promise<MonthlyOverview['cardCycle']> {
+  const at = new Date(Math.min(Date.now(), monthEnd.getTime() - 1));
+  const c = cycleContaining(at, await getStatementDay(userId));
+  const agg = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: { userId, isCreditCard: true, direction: 'debit', occurredAt: { gte: c.start, lt: c.end } },
+  });
+  return {
+    from: c.from,
+    to: c.to,
+    label: c.label,
+    statementDate: c.to,
+    charged: Math.round(Number(agg._sum.amount ?? 0) * 100) / 100,
+  };
 }
 
 export function currentMonth(): string {
@@ -239,6 +289,7 @@ export async function getWeeklyCategorySpend(userId: number, month: string): Pro
 export async function getMonthlyOverview(userId: number, month: string): Promise<MonthlyOverview> {
   const flags = await expenseFlagMap();
   const selfTransferIds = await selfTransferCategoryIds();
+  const cardBillId = await cardBillSubcategoryId();
   const { start, end } = monthBounds(month);
 
   const prev = new Date(start);
@@ -256,6 +307,7 @@ export async function getMonthlyOverview(userId: number, month: string): Promise
   let allMoneyOut = 0;
   let accountOutflow = 0;
   let creditCardSpend = 0;
+  let cardBillPaid = 0;
   let uncategorizedCount = 0;
   const catAgg = new Map<number | null, { name: string; amount: number; isExpense: boolean }>();
   const incomeAgg = new Map<string, number>();
@@ -282,6 +334,7 @@ export async function getMonthlyOverview(userId: number, month: string): Promise
     allMoneyOut += amt;
     // Only account debits reduce the balance; a card charge is owed, not paid.
     if (!t.isCreditCard) accountOutflow += amt;
+    if (cardBillId != null && t.subcategoryId === cardBillId && !t.isCreditCard) cardBillPaid += amt;
     const effId = t.subcategoryId ?? t.categoryId;
     const isExpense = effId == null ? true : flags.get(effId) ?? true;
     if (t.categoryId == null) uncategorizedCount++;
@@ -300,6 +353,8 @@ export async function getMonthlyOverview(userId: number, month: string): Promise
   }
 
   const prevMonthSpend = await spendForRange(userId, prevStart, prevEnd, flags);
+  const cardOutstanding = await cardOutstandingAt(userId, end, cardBillId);
+  const cardCycle = await cardCycleFor(userId, end);
   const deltaPct = prevMonthSpend > 0 ? ((totalSpend - prevMonthSpend) / prevMonthSpend) * 100 : null;
 
   const categoryBreakdown: CategoryBreakdownItem[] = Array.from(catAgg.entries())
@@ -322,6 +377,9 @@ export async function getMonthlyOverview(userId: number, month: string): Promise
     allMoneyOut: Math.round(allMoneyOut * 100) / 100,
     accountOutflow: Math.round(accountOutflow * 100) / 100,
     creditCardSpend: Math.round(creditCardSpend * 100) / 100,
+    cardBillPaid: Math.round(cardBillPaid * 100) / 100,
+    cardOutstanding: Math.round(cardOutstanding * 100) / 100,
+    cardCycle,
     prevMonthSpend: Math.round(prevMonthSpend * 100) / 100,
     deltaPct: deltaPct == null ? null : Math.round(deltaPct * 10) / 10,
     categoryBreakdown,
