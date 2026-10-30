@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCategories } from '@/lib/useCategories';
-import { CategoryDropdown } from './Select';
+import Select, { CategoryDropdown } from './Select';
 
 /** Today's date and the current time, in the browser's own timezone. */
 function localNow() {
@@ -14,10 +14,19 @@ function localNow() {
   };
 }
 
-/** Manual income/expense entry form (spec: user enters income manually). */
+type Kind = 'debit' | 'credit' | 'cardBill';
+
+/**
+ * Manual entry form (spec: user enters income manually). "Card bill" records
+ * paying a credit card bill from the account — filed as a transfer by the
+ * API, so it lowers the balance without double-counting the card's spend.
+ */
 export default function AddTransaction({ onAdded, onClose }: { onAdded: () => void; onClose: () => void }) {
   const categories = useCategories();
-  const [direction, setDirection] = useState<'debit' | 'credit'>('debit');
+  const [kind, setKind] = useState<Kind>('debit');
+  const direction = kind === 'credit' ? 'credit' : 'debit';
+  const [cards, setCards] = useState<{ last4: string; label: string }[]>([]);
+  const [cardLast4, setCardLast4] = useState('');
   const [amount, setAmount] = useState('');
   // Local, not UTC: toISOString() would roll the date over for anyone whose
   // offset puts them on a different calendar day than UTC right now.
@@ -29,6 +38,18 @@ export default function AddTransaction({ onAdded, onClose }: { onAdded: () => vo
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (kind !== 'cardBill' || cards.length) return;
+    fetch('/api/credit-cards', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d.cards ?? [];
+        setCards(list);
+        if (list.length === 1) setCardLast4(list[0].last4);
+      })
+      .catch(() => {});
+  }, [kind, cards.length]);
 
   const subs = useMemo(() => categories.find((c) => c.id === Number(categoryId))?.subcategories ?? [], [categories, categoryId]);
 
@@ -48,8 +69,9 @@ export default function AddTransaction({ onAdded, onClose }: { onAdded: () => vo
           amount: Number(amount),
           occurredAt: new Date(`${date}T${time || '00:00'}`).toISOString(),
           description: description.trim(),
-          categoryId: categoryId || null,
-          subcategoryId: subcategoryId || null,
+          ...(kind === 'cardBill'
+            ? { kind, cardLast4: cardLast4 || null }
+            : { categoryId: categoryId || null, subcategoryId: subcategoryId || null }),
           notes: notes.trim() || null,
         }),
       });
@@ -73,15 +95,23 @@ export default function AddTransaction({ onAdded, onClose }: { onAdded: () => vo
           </button>
         </div>
 
-        {/* Income / Expense toggle */}
+        {/* Expense / Income / Card bill toggle */}
         <div className="inline-flex w-full rounded-full border border-border bg-surface-2 p-0.5 text-sm">
-          <button onClick={() => setDirection('debit')} className={`flex-1 rounded-full py-2 ${direction === 'debit' ? 'bg-surface shadow-sm font-medium text-debit' : 'text-muted'}`}>
+          <button onClick={() => setKind('debit')} className={`flex-1 rounded-full py-2 ${kind === 'debit' ? 'bg-surface shadow-sm font-medium text-debit' : 'text-muted'}`}>
             Expense
           </button>
-          <button onClick={() => setDirection('credit')} className={`flex-1 rounded-full py-2 ${direction === 'credit' ? 'bg-surface shadow-sm font-medium text-credit' : 'text-muted'}`}>
+          <button onClick={() => setKind('credit')} className={`flex-1 rounded-full py-2 ${kind === 'credit' ? 'bg-surface shadow-sm font-medium text-credit' : 'text-muted'}`}>
             Income
           </button>
+          <button onClick={() => setKind('cardBill')} className={`flex-1 rounded-full py-2 ${kind === 'cardBill' ? 'bg-surface shadow-sm font-medium text-[rgb(var(--peri-2))]' : 'text-muted'}`}>
+            Card bill
+          </button>
         </div>
+        {kind === 'cardBill' && (
+          <p className="text-xs text-muted">
+            Paid from your bank account. Counts against your balance, not as spend — the card’s charges were already counted.
+          </p>
+        )}
 
         <div>
           <label className="block text-xs text-muted mb-1">Amount (₹)</label>
@@ -101,26 +131,46 @@ export default function AddTransaction({ onAdded, onClose }: { onAdded: () => vo
 
         <div>
           <label className="block text-xs text-muted mb-1">Description</label>
-          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={direction === 'credit' ? 'e.g. Freelance payment' : 'e.g. Groceries'} className="input" />
-        </div>
-
-        <div>
-          <label className="block text-xs text-muted mb-1">Category</label>
-          <CategoryDropdown
-            categories={categories}
-            value={{ categoryId: categoryId ? Number(categoryId) : null, subcategoryId: subcategoryId ? Number(subcategoryId) : null }}
-            onChange={(v) => {
-              setCategoryId(v.categoryId ? String(v.categoryId) : '');
-              setSubcategoryId(v.subcategoryId ? String(v.subcategoryId) : '');
-            }}
-            placeholder="Pick a category"
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={kind === 'cardBill' ? 'e.g. HDFC card bill' : kind === 'credit' ? 'e.g. Freelance payment' : 'e.g. Groceries'}
+            className="input"
           />
         </div>
+
+        {kind === 'cardBill' ? (
+          cards.length > 0 && (
+            <div>
+              <label className="block text-xs text-muted mb-1">Card</label>
+              <Select
+                value={cardLast4}
+                options={cards.map((c) => ({ value: c.last4, label: c.label, hint: `•••• ${c.last4}`, icon: 'creditcard' }))}
+                onChange={setCardLast4}
+                placeholder="Which card?"
+                icon="creditcard"
+              />
+            </div>
+          )
+        ) : (
+          <div>
+            <label className="block text-xs text-muted mb-1">Category</label>
+            <CategoryDropdown
+              categories={categories}
+              value={{ categoryId: categoryId ? Number(categoryId) : null, subcategoryId: subcategoryId ? Number(subcategoryId) : null }}
+              onChange={(v) => {
+                setCategoryId(v.categoryId ? String(v.categoryId) : '');
+                setSubcategoryId(v.subcategoryId ? String(v.subcategoryId) : '');
+              }}
+              placeholder="Pick a category"
+            />
+          </div>
+        )}
 
         {error && <div className="text-xs text-debit">{error}</div>}
 
         <button onClick={submit} disabled={busy} className="btn-primary w-full py-3">
-          {busy ? 'Saving…' : `Add ${direction === 'credit' ? 'income' : 'expense'}`}
+          {busy ? 'Saving…' : kind === 'cardBill' ? 'Record bill payment' : `Add ${kind === 'credit' ? 'income' : 'expense'}`}
         </button>
       </div>
     </div>

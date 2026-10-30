@@ -4,12 +4,25 @@
  * last-4s are credit cards. Everything else is treated as account money.
  */
 import { prisma } from './db';
+import { clampStatementDay } from './billingCycle';
 
 export interface CreditCardRow {
   id: number;
   last4: string;
   label: string;
   txnCount: number;
+}
+
+/** Day of the month this user's card bill is generated. */
+export async function getStatementDay(userId: number): Promise<number> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { cardStatementDay: true } });
+  return clampStatementDay(u?.cardStatementDay);
+}
+
+export async function setStatementDay(userId: number, day: number): Promise<number> {
+  const cardStatementDay = clampStatementDay(day);
+  await prisma.user.update({ where: { id: userId }, data: { cardStatementDay } });
+  return cardStatementDay;
 }
 
 /** The last-4s this user has registered as credit cards. */

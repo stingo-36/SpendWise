@@ -27,7 +27,8 @@
     "seed:admin": "tsx scripts/create-admin.ts",
     "db:admin-columns": "prisma db execute --file prisma/sql/2026-10-20-admin-columns.sql --schema prisma/schema.prisma",
     "db:subscription-kind": "prisma db execute --file prisma/sql/2026-10-29-subscription-kind.sql --schema prisma/schema.prisma",
-    "db:notes": "prisma db execute --file prisma/sql/2026-10-28-notes.sql --schema prisma/schema.prisma"
+    "db:notes": "prisma db execute --file prisma/sql/2026-10-28-notes.sql --schema prisma/schema.prisma",
+    "db:card-statement-day": "prisma db execute --file prisma/sql/2026-10-31-card-statement-day.sql --schema prisma/schema.prisma"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

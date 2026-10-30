@@ -27,7 +27,7 @@ const TAXONOMY: Cat[] = [
   { name: 'Salary', isExpense: false, subs: [] },
   { name: 'Bonus', isExpense: false, subs: [] },
   { name: 'Extra', isExpense: false, subs: [] },
-  { name: 'Transfers', isExpense: false, subs: [{ name: 'To people' }, { name: 'To self' }, { name: 'Cash withdrawal' }] },
+  { name: 'Transfers', isExpense: false, subs: [{ name: 'To people' }, { name: 'To self' }, { name: 'Cash withdrawal' }, { name: 'Credit card bill' }] },
   { name: 'Other', isExpense: true, subs: [{ name: 'Uncategorized' }, { name: 'Health' }, { name: 'Misc' }] },
 ];
 
