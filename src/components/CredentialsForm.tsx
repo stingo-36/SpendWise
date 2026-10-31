@@ -72,7 +72,7 @@ export default function CredentialsForm({ onSaved }: { onSaved?: () => void }) {
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-4 space-y-3">
+    <section className="card space-y-3 p-5">
       <div>
         <h2 className="text-sm font-semibold">API credentials</h2>
         <p className="text-xs text-muted">

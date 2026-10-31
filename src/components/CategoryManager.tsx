@@ -59,7 +59,7 @@ export default function CategoryManager() {
   return (
     <section className="card p-4 sm:p-5 space-y-4">
       <div>
-        <h2 className="text-sm font-semibold">Categories &amp; subcategories</h2>
+        <h2 className="h-section">Categories &amp; subcategories</h2>
         <p className="text-xs text-muted">Create your own. Shared across the app’s category list.</p>
       </div>
 

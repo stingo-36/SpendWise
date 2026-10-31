@@ -30,6 +30,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        display: ['var(--font-display)', 'var(--font-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       screens: {
@@ -39,8 +40,8 @@ const config: Config = {
         '4xl': '1.75rem',
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgb(26 28 31 / 0.04), 0 8px 24px -16px rgb(26 28 31 / 0.18)',
-        ink: '0 18px 40px -20px rgb(26 28 31 / 0.55)',
+        card: 'none',
+        ink: '0 18px 40px -24px rgb(13 16 20 / 0.5)',
       },
     },
   },

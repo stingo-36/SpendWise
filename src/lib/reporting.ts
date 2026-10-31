@@ -7,9 +7,10 @@
  * (this is how the Fees & charges override works), else the category's flag.
  * Only debits count as spend.
  */
+import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 import { cardBillSubcategoryId } from './cardBill';
-import { cycleContaining } from './billingCycle';
+import { cycleContaining, cycleEndingIn } from './billingCycle';
 import { getStatementDay } from './creditCards';
 
 export interface CategoryBreakdownItem {
@@ -47,7 +48,7 @@ function monthBounds(month: string): { start: Date; end: Date } {
 }
 
 /** Load a map of categoryId → effective is_expense (subcategory overrides). */
-async function expenseFlagMap(): Promise<Map<number, boolean>> {
+export async function expenseFlagMap(): Promise<Map<number, boolean>> {
   const cats = await prisma.category.findMany({ select: { id: true, isExpense: true } });
   return new Map(cats.map((c) => [c.id, c.isExpense]));
 }
@@ -65,7 +66,7 @@ async function expenseFlagMap(): Promise<Map<number, boolean>> {
  * you by another person vanished from Money in and from the income donut, even
  * though it really did land in the account.
  */
-async function selfTransferCategoryIds(): Promise<Set<number>> {
+export async function selfTransferCategoryIds(): Promise<Set<number>> {
   const root = await prisma.category.findFirst({
     where: { name: 'Transfers', parentId: null },
     select: { id: true, children: { select: { id: true, name: true } } },
@@ -114,6 +115,52 @@ async function cardCycleFor(userId: number, monthEnd: Date): Promise<MonthlyOver
     label: c.label,
     statementDate: c.to,
     charged: Math.round(Number(agg._sum.amount ?? 0) * 100) / 100,
+  };
+}
+
+export interface LastBill {
+  from: string;
+  to: string;
+  label: string;
+  /** Charges minus refunds in that cycle — what the statement asked for. */
+  amount: number;
+  /** Card bill payments made after the statement was generated. */
+  paid: number;
+  due: number;
+  lastPaidAt: string | null;
+}
+
+/**
+ * The most recently generated statement: the cycle that closed on or before
+ * today, what it billed, and how much has been paid towards it since.
+ */
+export async function getLastBill(userId: number, now = new Date()): Promise<LastBill> {
+  const day = await getStatementDay(userId);
+  const open = cycleContaining(now, day);
+  const last = cycleEndingIn(open.start.getFullYear(), open.start.getMonth(), open.start.getDate() - 1);
+  const cardBillId = await cardBillSubcategoryId();
+  const [charged, refunded, payments] = await Promise.all([
+    prisma.transaction.aggregate({ _sum: { amount: true }, where: { userId, isCreditCard: true, direction: 'debit', occurredAt: { gte: last.start, lt: last.end } } }),
+    prisma.transaction.aggregate({ _sum: { amount: true }, where: { userId, isCreditCard: true, direction: 'credit', occurredAt: { gte: last.start, lt: last.end } } }),
+    cardBillId == null
+      ? Promise.resolve([] as { amount: Prisma.Decimal; occurredAt: Date }[])
+      : prisma.transaction.findMany({
+          where: { userId, isCreditCard: false, direction: 'debit', subcategoryId: cardBillId, occurredAt: { gte: last.end } },
+          select: { amount: true, occurredAt: true },
+          orderBy: { occurredAt: 'desc' },
+        }),
+  ]);
+  const amount = Math.max(0, Number(charged._sum.amount ?? 0) - Number(refunded._sum.amount ?? 0));
+  const paid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const r = (n: number) => Math.round(n * 100) / 100;
+  return {
+    from: last.from,
+    to: last.to,
+    label: last.label,
+    amount: r(amount),
+    paid: r(paid),
+    due: r(Math.max(0, amount - paid)),
+    lastPaidAt: payments[0]?.occurredAt.toISOString() ?? null,
   };
 }
 

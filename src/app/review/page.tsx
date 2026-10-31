@@ -7,6 +7,7 @@ import CategoryEditor from '@/components/CategoryEditor';
 import CategoryPicker from '@/components/CategoryPicker';
 import Select, { monthOpts } from '@/components/Select';
 import Icon from '@/components/Icon';
+import { DATA_CHANGED_EVENT } from '@/lib/navLinks';
 
 interface Txn {
   id: number;
@@ -35,19 +36,21 @@ export default function ReviewPage() {
   // direction by default — a credit is almost always income.
   const [side, setSide] = useState<'expense' | 'income'>('expense');
 
-  // The queue is scoped to ONE month. Unscoped, it dragged every uncategorized
-  // transaction ever synced into the queue, so a fresh month opened on a
-  // backlog from months already dealt with.
-  const months = useMemo(() => monthOpts(12), []);
-  const [month, setMonth] = useState(months[0].value);
+  // Opens on "All months" so the page always matches the sidebar's Inbox
+  // count, which covers every uncategorised payment. Pick a month to work
+  // through one month's backlog at a time.
+  const months = useMemo(() => [{ value: 'all', label: 'All months', icon: 'calendar' }, ...monthOpts(12)], []);
+  const [month, setMonth] = useState('all');
 
   const load = useCallback(async (m: string) => {
     setLoading(true);
-    const [y, mo] = m.split('-').map(Number);
-    const last = new Date(y, mo, 0).getDate();
-    const res = await fetch(
-      `/api/transactions?reviewQueue=1&pageSize=200&from=${m}-01&to=${m}-${String(last).padStart(2, '0')}`,
-    );
+    let range = '';
+    if (m !== 'all') {
+      const [y, mo] = m.split('-').map(Number);
+      const last = new Date(y, mo, 0).getDate();
+      range = `&from=${m}-01&to=${m}-${String(last).padStart(2, '0')}`;
+    }
+    const res = await fetch(`/api/transactions?reviewQueue=1&pageSize=200${range}`);
     const data = await res.json();
     setQueue(data.items);
     setTotal(data.items.length);
@@ -78,6 +81,8 @@ export default function ReviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'always', categoryId, subcategoryId: subcategoryId ?? null, reapply: true }),
       });
+      // Lets the sidebar's Inbox count drop right away.
+      window.dispatchEvent(new Event(DATA_CHANGED_EVENT));
       setFlash(`${current.label} → ${cat?.name}${sub ? ' › ' + sub.name : ''}`);
       setPendingCat(null);
       setIdx((i) => i + 1);
@@ -119,137 +124,154 @@ export default function ReviewPage() {
   const remaining = queue.length - idx;
   const donePct = total > 0 ? Math.round((idx / total) * 100) : 0;
 
+  const upNext = queue.slice(idx, idx + 7);
+  const kbd = 'rounded-md border border-border bg-surface px-1.5 font-mono text-[11px] text-muted';
+
   return (
     <div className="space-y-4">
-      {/* Stacks on phones: the month picker's 11rem minimum plus Refresh
-          could not fit one 375px row, so the button spilled past the gutter. */}
-      <header className="relative z-30 flex flex-col gap-3 animate-fade-up sm:flex-row sm:items-center sm:justify-between">
+      <header className="relative z-30 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="h-page">Review queue</h1>
-          <p className="text-sm text-muted">{remaining} left this month · one keystroke per decision</p>
+          <div className="eyebrow">
+            {remaining} left · {months.find((m) => m.value === month)?.label}
+          </div>
+          <h1 className="h-page mt-1.5">Inbox</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Select
-            value={month}
-            options={months}
-            onChange={setMonth}
-            align="right"
-            className="!w-auto min-w-0 flex-1 rounded-full sm:min-w-[11rem] sm:flex-none"
-          />
-          <button onClick={() => load(month)} className="btn-outline shrink-0 px-3 py-1.5">Refresh</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="hidden text-xs text-muted xl:inline">
+            <kbd className={kbd}>1</kbd>–<kbd className={kbd}>9</kbd> pick · <kbd className={kbd}>s</kbd> skip · <kbd className={kbd}>e</kbd> just this one
+          </span>
+          <Select value={month} options={months} onChange={setMonth} align="right" className="!w-auto min-w-0 flex-1 sm:min-w-[11rem] sm:flex-none" />
+          <button onClick={() => load(month)} className="btn-outline shrink-0 px-3">Refresh</button>
         </div>
       </header>
 
-      {/* Progress */}
       {total > 0 && (
-        <div className="animate-fade-up" style={{ animationDelay: '40ms' }}>
-          <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
-            <div className="h-full rounded-full bg-accent transition-all duration-300" style={{ width: `${donePct}%` }} />
-          </div>
-          <div className="mt-1 text-[11px] text-muted text-right">{idx} / {total} done</div>
+        <div className="h-2 overflow-hidden rounded-full bg-[rgb(var(--border))]" role="progressbar" aria-valuenow={donePct} aria-valuemin={0} aria-valuemax={100}>
+          <div className="h-full rounded-full bg-[rgb(var(--ink))] transition-all duration-300" style={{ width: `${donePct}%` }} />
         </div>
       )}
 
-      {flash && <div className="text-xs text-credit animate-fade-in">✓ {flash}</div>}
+      {flash && <div className="text-xs font-semibold text-credit animate-fade-in">✓ {flash}</div>}
 
       {!current ? (
-        <div className="card p-10 text-center animate-pop">
-          <div className="text-5xl mb-3">🎉</div>
-          <div className="font-semibold text-lg">All caught up</div>
-          <div className="mt-1 text-sm text-muted">Everything in this month is categorized.</div>
+        <div className="card flex flex-col items-center gap-2 p-10 text-center animate-pop">
+          <span className="tile mb-1 h-14 w-14 bg-amber text-[rgb(var(--ink))]">
+            <Icon name="check" size={26} />
+          </span>
+          <div className="font-display text-2xl font-extrabold">All caught up</div>
+          <div className="text-sm text-muted">{month === 'all' ? 'Every payment has a category.' : 'Everything this month has a category.'}</div>
         </div>
       ) : (
-        <>
-          {/* Transaction card */}
-          <div key={current.id} className="card p-6 animate-pop relative overflow-hidden">
-            <div className={`absolute left-0 inset-y-0 w-1 ${current.direction === 'debit' ? 'bg-debit' : 'bg-credit'}`} />
-            {/* Amount leads on phones; beside the merchant once there's room —
-                side-by-side at 320px squeezed the meta line to one word a row. */}
-            <div className="flex flex-col gap-2 pl-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-              <div className="order-2 min-w-0 sm:order-1">
-                <div className="truncate text-xl font-extrabold tracking-tight sm:text-2xl">{current.label}</div>
-                <div className="mt-1.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-md bg-surface-2 px-2 py-0.5 font-mono text-xs text-muted">
-                  {current.rawMerchant}
-                </div>
-                <div className="mt-1.5 text-xs text-muted">
-                  {fmtDateTime(current.occurredAt)} · {current.instrument}
-                  {current.llmConfidence != null ? ` · AI ${Math.round(current.llmConfidence * 100)}%` : ''}
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <section key={current.id} className="card flex flex-col gap-5 p-5 animate-pop sm:p-7">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-center gap-4">
+                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-[rgb(var(--ink))] font-display text-2xl font-extrabold text-amber">
+                  {current.label.trim().charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate font-display text-[clamp(1.375rem,3vw,2rem)] font-extrabold tracking-[-0.02em]">{current.label}</div>
+                  <div className="tabular truncate text-xs text-muted">
+                    {fmtDateTime(current.occurredAt)} · {current.instrument}
+                    {current.llmConfidence != null ? ` · AI ${Math.round(current.llmConfidence * 100)}% sure` : ''}
+                  </div>
                 </div>
               </div>
-              <div className={`order-1 shrink-0 text-[26px] font-extrabold tabular sm:order-2 sm:text-[32px] ${current.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
-                {current.direction === 'debit' ? '−' : '+'}{inr(current.amount)}
+              <div className={`shrink-0 font-display text-[clamp(1.75rem,4vw,2.5rem)] font-extrabold tabular ${current.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
+                {current.direction === 'debit' ? '−' : '+'}
+                {inr(current.amount)}
               </div>
             </div>
-          </div>
+            <div className="truncate rounded-xl bg-surface-2 px-3.5 py-2.5 font-mono text-xs text-muted">{current.rawMerchant}</div>
 
-          {editing ? (
-            <CategoryEditor
-              txnId={current.id}
-              merchant={current.merchant}
-              currentCategoryId={null}
-              currentSubcategoryId={null}
-              compact
-              onDone={() => { setEditing(false); setIdx((i) => i + 1); }}
-              onCancel={() => setEditing(false)}
-            />
-          ) : (
-            <>
-              {/* Expense / Income sides of the taxonomy */}
-              <div className="inline-flex w-full rounded-full border border-border bg-surface-2 p-1 text-sm sm:w-auto">
-                {(['expense', 'income'] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => { setSide(v); setPendingCat(null); }}
-                    className={`flex-1 rounded-full px-5 py-1.5 capitalize transition-all sm:flex-none ${side === v ? 'bg-[rgb(var(--ink))] text-white font-semibold' : 'text-muted hover:text-text'}`}
-                  >
-                    {v}
-                    <kbd className="ml-1.5 text-[10px] opacity-60">{v === 'income' ? 'i' : 'x'}</kbd>
-                  </button>
-                ))}
-              </div>
-
-              {/* Categories AND their subcategories, all in view. Clicking a
-                  category files it as-is; clicking a subcategory chip files it
-                  one level deeper — no second screen, no popup. */}
-              <CategoryPicker
-                categories={categories}
-                side={side}
-                numbered
-                value={{ categoryId: pendingCat, subcategoryId: null }}
-                onChange={(p) => p.categoryId != null && assign(p.categoryId, p.subcategoryId)}
-                columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            {editing ? (
+              <CategoryEditor
+                txnId={current.id}
+                merchant={current.merchant}
+                currentCategoryId={null}
+                currentSubcategoryId={null}
+                compact
+                onDone={() => { setEditing(false); setIdx((i) => i + 1); window.dispatchEvent(new Event(DATA_CHANGED_EVENT)); }}
+                onCancel={() => setEditing(false)}
               />
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="eyebrow">Pick a category</span>
+                  {/* Expense / Income sides of the taxonomy */}
+                  <div className="seg" role="group" aria-label="Side">
+                    {(['expense', 'income'] as const).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => { setSide(v); setPendingCat(null); }}
+                        className={`seg-btn min-h-9 capitalize ${side === v ? 'seg-on' : ''}`}
+                      >
+                        {v} <kbd className="ml-1 text-[10px] text-muted">{v === 'income' ? 'i' : 'x'}</kbd>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              {pendingCat != null && (
-                <p className="text-xs font-semibold text-muted">
-                  Pick a subcategory with 1–9, press Enter to file under the category alone, or Esc to back out.
-                </p>
-              )}
+                {/* Categories and their subcategories, all in view. */}
+                <CategoryPicker
+                  categories={categories}
+                  side={side}
+                  numbered
+                  value={{ categoryId: pendingCat, subcategoryId: null }}
+                  onChange={(p) => p.categoryId != null && assign(p.categoryId, p.subcategoryId)}
+                  columns="grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
+                />
 
-              {/* What a click here actually does was never stated: it writes a
-                  rule, so every future “{merchant}” lands in the same place. */}
-              <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <Icon name="sparkle" size={13} className="shrink-0" />
-                Choosing a category also files <span className="font-bold text-text">{current.merchant}</span> here
-                automatically from now on.
-              </p>
+                {pendingCat != null && (
+                  <p className="text-xs font-semibold text-muted">Pick a subcategory with 1–9, press Enter to file under the category alone, or Esc to back out.</p>
+                )}
 
-              <div className="flex flex-wrap gap-2 text-sm">
-                <button
-                  onClick={() => setEditing(true)}
-                  className="btn-outline gap-1.5 px-3 py-1.5"
-                  title="Categorise this single transaction without creating a rule for the merchant"
-                >
-                  <kbd className="rounded bg-surface-2 px-1 text-xs">e</kbd>
-                  <Icon name="edit" size={13} /> Just this one — don’t remember
-                </button>
-                <button onClick={skip} className="btn-ghost gap-1.5">
-                  <kbd className="rounded bg-surface-2 px-1 text-xs">s</kbd> Skip
-                </button>
-              </div>
-            </>
-          )}
-        </>
+                <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  {/* Choosing a category writes a rule for this merchant. */}
+                  <p className="flex items-center gap-1.5 text-xs text-muted">
+                    <Icon name="sparkle" size={13} className="shrink-0" />
+                    Also files <span className="font-semibold text-text">{current.merchant}</span> here from now on.
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditing(true)} className="btn-outline px-3" title="Categorise this one without creating a rule">
+                      Just this one
+                    </button>
+                    <button onClick={skip} className="btn-outline px-4">
+                      Skip
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+
+          <aside className="card hidden p-2 lg:block" aria-label="Queue">
+            <div className="eyebrow px-3 pb-1 pt-2">Up next</div>
+            <ul>
+              {upNext.map((q, i) => (
+                <li key={q.id}>
+                  <button
+                    onClick={() => { setIdx(idx + i); setEditing(false); setPendingCat(null); }}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${i === 0 ? 'bg-sand' : 'hover:bg-surface-2'}`}
+                  >
+                    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-bold ${i === 0 ? 'bg-[rgb(var(--ink))] text-amber' : 'bg-surface-2 text-muted'}`}>
+                      {q.label.trim().charAt(0).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{q.label}</span>
+                      <span className="tabular text-xs text-muted">{fmtDateTime(q.occurredAt).split(',')[0]}</span>
+                    </span>
+                    <span className={`tabular text-sm ${q.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
+                      {q.direction === 'debit' ? '−' : '+'}
+                      {inr(q.amount)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {remaining > upNext.length && <div className="px-3 py-2 text-xs text-muted">+ {remaining - upNext.length} more</div>}
+          </aside>
+        </div>
       )}
     </div>
   );

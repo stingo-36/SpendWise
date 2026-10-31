@@ -3,50 +3,52 @@
 @tailwind utilities;
 
 /* ───────────────────────────────────────────────────────────────────────────
-   Design tokens — "Budget planner / Finance App" language:
-   warm off-white canvas, white cards with generous radii and soft shadows,
-   charcoal "ink" hero surfaces, amber CTA accent, periwinkle secondary and
-   pastel category tints.
+   Design tokens — "Ink & Lime": a cool grey ground, white cards, a near-black
+   ink sidebar and hero panels, and one lime accent kept for what matters now
+   (the live number, the active page, the main action). Money out is orange
+   and money in is blue so they differ in lightness, not hue alone.
+   Variable names predate the palette (--amber is the lime accent, --peri the
+   blue) so every existing usage picks the new look up unchanged.
    ─────────────────────────────────────────────────────────────────────────── */
 :root {
-  --bg: 246 247 249;        /* warm off-white canvas */
-  --surface: 255 255 255;   /* cards */
-  --surface-2: 242 243 246; /* insets / tracks */
-  --border: 233 235 239;
-  --text: 26 28 31;         /* near-black ink */
-  /* Secondary text. Was 122/128/138 (4.7:1) — legible by the letter of the
-     spec but it read as washed-out grey on every list and table. Darkened to
-     ~6.4:1 so meta lines, table headers and chip captions hold their weight. */
-  --muted: 95 101 112;
-  /* For the few places that need a lighter hint (placeholders, dividers). */
-  --muted-soft: 138 144 154;
+  /* White page and white cards (no borders or shadows) — spacing does the
+     separating; light grey is kept for insets inside a card. */
+  --bg: 255 255 255;
+  --surface: 255 255 255;
+  --surface-2: 236 238 242;
+  --border: 226 228 233;
+  --text: 13 16 20;
+  --muted: 91 98 112;       /* 6:1 on white */
+  --muted-soft: 138 145 156;
 
-  /* Primary = ink (used for solid buttons, active states, focus rings). */
-  --accent: 30 32 38;
-  --accent-2: 46 49 58;
+  /* Primary = ink (solid buttons, focus rings). */
+  --accent: 13 16 20;
+  --accent-2: 27 32 40;
 
-  /* Signature accents */
-  --amber: 245 184 65;      /* CTA circles, progress fills */
-  --amber-2: 232 166 38;
-  --peri: 128 149 242;      /* secondary highlight band */
-  --peri-2: 104 126 232;
+  /* Signature accent: lime. Only ever on ink or as a fill behind ink text. */
+  --amber: 203 242 74;
+  /* Dark olive for text that names the accent on a light ground. */
+  --amber-2: 77 102 8;
+  /* Secondary: blue. */
+  --peri: 29 95 196;
+  --peri-2: 22 76 158;
 
-  /* Pastel category tints */
-  --tint-mint: 226 241 234;
-  --tint-lilac: 238 234 248;
-  --tint-sky: 232 239 250;
-  --tint-blush: 250 236 234;
-  --tint-sand: 251 243 226;
+  /* Category / state tints */
+  --tint-mint: 221 243 240;
+  --tint-lilac: 236 230 250;
+  --tint-sky: 228 237 251;
+  --tint-blush: 251 235 221;
+  --tint-sand: 243 248 225;
 
-  --debit: 214 88 78;       /* muted terracotta */
-  --credit: 42 138 105;     /* muted forest */
+  --debit: 180 64 12;       /* orange, money out */
+  --credit: 29 95 196;      /* blue, money in */
 
   /* Ink surfaces (sidebar, hero cards) */
-  --ink: 30 32 38;
-  --ink-2: 46 49 58;
-  --sidebar: 30 32 38;
-  --sidebar-fg: 240 241 243;
-  --sidebar-muted: 149 154 164;
+  --ink: 13 16 20;
+  --ink-2: 27 32 40;
+  --sidebar: 13 16 20;
+  --sidebar-fg: 255 255 255;
+  --sidebar-muted: 163 170 181;
 }
 
 html {
@@ -68,36 +70,32 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   line-height: 1.5;
-  letter-spacing: -0.01em;
   padding-bottom: env(safe-area-inset-bottom);
-  /* Soft warm wash behind the canvas, as in the reference frames. */
-  background-image:
-    radial-gradient(60rem 40rem at 100% -10%, rgb(var(--tint-sand) / 0.75), transparent 60%),
-    radial-gradient(50rem 34rem at -10% 0%, rgb(var(--tint-sky) / 0.7), transparent 60%);
-  background-attachment: fixed;
 }
 
-h1, h2, h3 { letter-spacing: -0.022em; font-weight: 700; }
+h1, h2, h3 { font-family: var(--font-display), var(--font-sans), system-ui, sans-serif; letter-spacing: -0.022em; font-weight: 700; }
 
 .font-mono { font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace; }
-.tabular { font-variant-numeric: tabular-nums; }
+/* Every amount, date and card number: mono, so columns line up. */
+.tabular { font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.font-display { font-family: var(--font-display), var(--font-sans), system-ui, sans-serif; }
 .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 /* Reusable component classes (no external deps). */
 @layer components {
-  .card { @apply rounded-3xl border border-border bg-surface shadow-card; }
-  .card-ink { @apply rounded-3xl bg-[rgb(var(--ink))] text-white shadow-ink; }
+  .card { @apply rounded-[20px] bg-surface; }
+  .card-ink { @apply rounded-[20px] bg-[rgb(var(--ink))] text-white; }
 
-  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-full text-sm font-semibold transition-all disabled:opacity-60 disabled:pointer-events-none; }
+  .btn { @apply inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-60 disabled:pointer-events-none; }
   .btn-primary { @apply btn bg-accent px-5 py-2.5 text-white hover:bg-[rgb(var(--accent-2))] active:scale-[0.97]; }
-  .btn-accent { @apply btn bg-amber px-5 py-2.5 text-[rgb(var(--ink))] hover:bg-[rgb(var(--amber-2))] active:scale-[0.97]; }
+  .btn-accent { @apply btn bg-amber px-5 py-2.5 text-[rgb(var(--ink))] hover:brightness-95 active:scale-[0.97]; }
   .btn-outline { @apply btn border border-border bg-surface px-5 py-2.5 text-text hover:bg-surface-2 active:scale-[0.97]; }
-  .btn-ghost { @apply btn px-3.5 py-2 text-muted hover:bg-surface-2 hover:text-text; }
+  .btn-ghost { @apply btn min-h-0 px-3.5 py-2 text-muted hover:bg-surface-2 hover:text-text; }
 
   /* Round amber "go" affordance from the reference. */
   .fab-amber { @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber text-[rgb(var(--ink))] transition-transform hover:scale-105 active:scale-95; }
 
-  .input { @apply w-full rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition-shadow focus:ring-2 focus:ring-accent/15 focus:border-[rgb(var(--text))]/25; }
+  .input { @apply w-full min-h-11 rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-text placeholder:text-muted/70 outline-none transition-shadow focus:ring-2 focus:ring-accent/15 focus:border-[rgb(var(--text))]/25; }
 
   /* Native selects paint their arrow inside the box's own padding, so on narrow
      widths the label runs straight into it. Draw our own chevron and reserve
@@ -109,29 +107,35 @@ h1, h2, h3 { letter-spacing: -0.022em; font-weight: 700; }
     background-size: 1rem 1rem;
   }
   .select::-ms-expand { display: none; }
-  .chip { @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold; }
 
   /* ── Headings ──────────────────────────────────────────────────────────
      Page titles used to be pinned at 28px, which is a desktop size: on a
      360px phone it ate the header row and pushed the action buttons into
      the gutter. These scale with the viewport and settle at the old size
      once there is room for it. */
-  .h-page { @apply text-[clamp(1.375rem,5.2vw,1.75rem)] font-extrabold tracking-tight; }
-  .h-section { @apply text-[clamp(1.0625rem,3.6vw,1.25rem)] font-extrabold tracking-tight; }
+  .h-page { @apply font-display text-[clamp(2rem,6vw,2.75rem)] font-extrabold leading-none tracking-[-0.03em]; }
+  .h-section { @apply font-display text-[clamp(1.125rem,3.6vw,1.25rem)] font-bold tracking-tight; }
   .tile { @apply grid place-items-center rounded-2xl; }
+  /* Switches (Spend / Income, This month / All time…): a pale bordered
+     track; the chosen option is a dark pill, the rest plain text. */
+  .seg { @apply inline-flex flex-wrap items-center gap-1 rounded-full border border-border bg-[#F7F8FA] p-1 text-sm; }
+  .seg-btn { @apply inline-flex min-h-9 items-center justify-center gap-1 whitespace-nowrap rounded-full px-4 font-semibold text-muted transition-colors hover:bg-white hover:text-text; }
+  .seg-on { @apply bg-[rgb(var(--ink))] text-white hover:bg-[rgb(var(--ink))] hover:text-white; }
+  /* Small caps label above a title or number. */
+  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-muted; }
 
   /* ── Surfaces ──────────────────────────────────────────────────────────
      A page of identical white cards reads flat. These give a section a tinted
      ground that still belongs to the palette. Colour comes from --tone-*,
      which each usage sets inline from categoryStyle(). */
   .card-tinted {
-    @apply relative overflow-hidden rounded-3xl border shadow-card;
+    @apply relative overflow-hidden rounded-[20px];
     background-color: var(--tone-soft, rgb(var(--surface)));
-    border-color: var(--tone-border, rgb(var(--border)));
   }
   /* Hero panel: a page's headline number on flat ink — no gradient. */
   .card-hero {
-    @apply relative overflow-hidden rounded-3xl bg-[rgb(var(--ink))] text-white shadow-ink;
+    @apply relative overflow-hidden rounded-[20px] bg-[rgb(var(--ink))] text-white;
   }
 
   /* ── Badges ────────────────────────────────────────────────────────────
@@ -157,8 +161,8 @@ h1, h2, h3 { letter-spacing: -0.022em; font-weight: 700; }
 
   /* Pressable list row / option in a picker. */
   .pick {
-    @apply flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-3 py-2.5 text-left text-sm transition-all;
-    @apply hover:-translate-y-0.5 hover:shadow-card;
+    @apply flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-3 py-2.5 text-left text-sm transition-colors;
+    @apply hover:border-[rgb(var(--text))]/40;
   }
   .pick-on { @apply border-transparent text-white shadow-card; background: var(--tone-solid, rgb(var(--ink))); }
 }
@@ -199,7 +203,7 @@ h1, h2, h3 { letter-spacing: -0.022em; font-weight: 700; }
 .animate-slide-in { animation: slideInLeft 0.4s ease both; }
 
 .lift { transition: transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease; }
-.lift:hover { transform: translateY(-3px); box-shadow: 0 20px 44px -22px rgb(26 28 31 / 0.28); }
+.lift:hover { transform: translateY(-2px); }
 
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up, .animate-fade-in, .animate-pop, .animate-slide-in,

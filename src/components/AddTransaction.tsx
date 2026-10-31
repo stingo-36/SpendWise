@@ -21,13 +21,24 @@ type Kind = 'debit' | 'credit' | 'cardBill';
  * paying a credit card bill from the account — filed as a transfer by the
  * API, so it lowers the balance without double-counting the card's spend.
  */
-export default function AddTransaction({ onAdded, onClose }: { onAdded: () => void; onClose: () => void }) {
+export default function AddTransaction({
+  onAdded,
+  onClose,
+  initialKind = 'debit',
+  initialAmount,
+}: {
+  onAdded: () => void;
+  onClose: () => void;
+  initialKind?: Kind;
+  /** Pre-filled amount, e.g. the bill still due when paying from Cards. */
+  initialAmount?: number;
+}) {
   const categories = useCategories();
-  const [kind, setKind] = useState<Kind>('debit');
+  const [kind, setKind] = useState<Kind>(initialKind);
   const direction = kind === 'credit' ? 'credit' : 'debit';
   const [cards, setCards] = useState<{ last4: string; label: string }[]>([]);
   const [cardLast4, setCardLast4] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(initialAmount ? initialAmount.toFixed(2) : '');
   // Local, not UTC: toISOString() would roll the date over for anyone whose
   // offset puts them on a different calendar day than UTC right now.
   const [date, setDate] = useState(() => localNow().date);
@@ -96,14 +107,14 @@ export default function AddTransaction({ onAdded, onClose }: { onAdded: () => vo
         </div>
 
         {/* Expense / Income / Card bill toggle */}
-        <div className="inline-flex w-full rounded-full border border-border bg-surface-2 p-0.5 text-sm">
-          <button onClick={() => setKind('debit')} className={`flex-1 rounded-full py-2 ${kind === 'debit' ? 'bg-surface shadow-sm font-medium text-debit' : 'text-muted'}`}>
+        <div className="seg w-full">
+          <button onClick={() => setKind('debit')} className={`seg-btn flex-1 ${kind === 'debit' ? 'seg-on' : ''}`}>
             Expense
           </button>
-          <button onClick={() => setKind('credit')} className={`flex-1 rounded-full py-2 ${kind === 'credit' ? 'bg-surface shadow-sm font-medium text-credit' : 'text-muted'}`}>
+          <button onClick={() => setKind('credit')} className={`seg-btn flex-1 ${kind === 'credit' ? 'seg-on' : ''}`}>
             Income
           </button>
-          <button onClick={() => setKind('cardBill')} className={`flex-1 rounded-full py-2 ${kind === 'cardBill' ? 'bg-surface shadow-sm font-medium text-[rgb(var(--peri-2))]' : 'text-muted'}`}>
+          <button onClick={() => setKind('cardBill')} className={`seg-btn flex-1 ${kind === 'cardBill' ? 'seg-on' : ''}`}>
             Card bill
           </button>
         </div>

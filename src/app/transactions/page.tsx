@@ -8,7 +8,8 @@ import AddTransaction from '@/components/AddTransaction';
 import Icon from '@/components/Icon';
 import Select, { CategoryDropdown } from '@/components/Select';
 import { categoryStyle } from '@/lib/palette';
-import CategoryCapsule from '@/components/CategoryCapsule';
+import CategoryTag from '@/components/CategoryTag';
+import { DATA_CHANGED_EVENT } from '@/lib/navLinks';
 
 interface Txn {
   id: number;
@@ -58,6 +59,20 @@ function dayHeading(iso: string): string {
   if (key === todayKey) return `Today · ${base}`;
   if (key === yKey) return `Yesterday · ${base}`;
   return base;
+}
+/** "Today" / "Yesterday" / "Monday", and the date beside it. */
+function dayParts(iso: string): { lead: string; date: string } {
+  const key = dayKey(iso);
+  const now = new Date();
+  const todayKey = now.toLocaleDateString('en-CA', { timeZone: IST });
+  const yKey = new Date(now.getTime() - 86400000).toLocaleDateString('en-CA', { timeZone: IST });
+  const d = new Date(iso);
+  const sameYear = d.toLocaleDateString('en-CA', { timeZone: IST, year: 'numeric' }) === now.toLocaleDateString('en-CA', { timeZone: IST, year: 'numeric' });
+  const date = d.toLocaleDateString('en-IN', { timeZone: IST, day: 'numeric', month: 'long', ...(sameYear ? {} : { year: 'numeric' }) });
+  const weekday = d.toLocaleDateString('en-IN', { timeZone: IST, weekday: 'long' });
+  if (key === todayKey) return { lead: 'Today', date: `${weekday}, ${date}` };
+  if (key === yKey) return { lead: 'Yesterday', date: `${weekday}, ${date}` };
+  return { lead: weekday, date };
 }
 function timeOf(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-IN', { timeZone: IST, hour: '2-digit', minute: '2-digit' });
@@ -139,6 +154,12 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // The tab bar's + button adds transactions without going through this page.
+  useEffect(() => {
+    window.addEventListener(DATA_CHANGED_EVENT, load);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, load);
   }, [load]);
 
   useEffect(() => {
@@ -223,15 +244,15 @@ export default function TransactionsPage() {
     <div className="space-y-4">
       <header className="animate-fade-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="h-page">Transactions</h1>
+          <h1 className="h-page">Activity</h1>
           <p className="text-sm text-muted">{total} shown · newest first</p>
         </div>
         {/* Wraps on phones: four controls on one 343px row left each of them
             squeezed against the gutter. */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex w-full rounded-full border border-border bg-surface-2 p-0.5 text-sm xs:w-auto xs:flex-1 sm:flex-none">
-            <button onClick={() => { setPage(1); setFrom(monthStart); setTo(''); }} className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 sm:flex-none ${from === monthStart && !to ? 'bg-surface shadow-sm font-medium' : 'text-muted'}`}>This month</button>
-            <button onClick={() => { setPage(1); setFrom(''); setTo(''); }} className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 sm:flex-none ${!from ? 'bg-surface shadow-sm font-medium' : 'text-muted'}`}>All time</button>
+          <div className="seg">
+            <button onClick={() => { setPage(1); setFrom(monthStart); setTo(''); }} className={`seg-btn ${from === monthStart && !to ? 'seg-on' : ''}`}>This month</button>
+            <button onClick={() => { setPage(1); setFrom(''); setTo(''); }} className={`seg-btn ${!from ? 'seg-on' : ''}`}>All time</button>
           </div>
           <button
             onClick={() => {
@@ -269,8 +290,8 @@ export default function TransactionsPage() {
       {/* Filters — one row, everything on the same baseline including the
           reset link, which used to wrap onto a line of its own. */}
       <div className="card p-3 sm:p-4 animate-fade-up relative z-30" style={{ animationDelay: '60ms' }}>
-        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
-          <div className="relative lg:w-48">
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center">
+          <div className="relative lg:min-w-[220px] lg:flex-1">
             <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input placeholder="Search merchant…" value={merchant} onChange={(e) => { setPage(1); setMerchant(e.target.value); }} className="input pl-9" />
           </div>
@@ -315,9 +336,9 @@ export default function TransactionsPage() {
               a native date input clips its own value at that width — the
               picker glyph is drawn inside the box. Stack them until there is
               room, and trim the padding the glyph would otherwise eat. */}
-          <div className="grid grid-cols-1 gap-2.5 xs:grid-cols-2 lg:flex lg:flex-1">
-            <input type="date" value={from} onChange={(e) => { setPage(1); setFrom(e.target.value); }} className="input px-3 lg:w-40" aria-label="From date" />
-            <input type="date" value={to} onChange={(e) => { setPage(1); setTo(e.target.value); }} className="input px-3 lg:w-40" aria-label="To date" />
+          <div className="grid grid-cols-1 gap-2.5 xs:grid-cols-2 lg:flex lg:flex-none">
+            <input type="date" value={from} onChange={(e) => { setPage(1); setFrom(e.target.value); }} className="input px-3 lg:w-[9.5rem]" aria-label="From date" />
+            <input type="date" value={to} onChange={(e) => { setPage(1); setTo(e.target.value); }} className="input px-3 lg:w-[9.5rem]" aria-label="To date" />
           </div>
           {(merchant || categoryId || direction || source || from || to) && (
             <button
@@ -335,137 +356,98 @@ export default function TransactionsPage() {
       ) : groups.length === 0 ? (
         <div className="text-muted py-8 text-center">No transactions match.</div>
       ) : (
-        <div className="space-y-5">
-          {groups.map((g) => (
-            <div key={g.key}>
-              {/* Day header with running net */}
-              <div className="mb-2 flex items-center gap-2 px-1">
-                <Icon name="calendar" size={13} className="shrink-0 text-muted" />
-                <div className="text-xs font-bold uppercase tracking-wide text-muted">{dayHeading(g.iso)}</div>
-                <span className="h-px flex-1 bg-border" />
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-bold tabular ${
-                    g.net >= 0 ? 'bg-mint text-[rgb(var(--credit))]' : 'bg-blush text-[rgb(var(--debit))]'
-                  }`}
-                >
-                  {g.net >= 0 ? '+' : '−'}{inr(Math.abs(g.net))}
-                </span>
-              </div>
+        <div>
+          {groups.map((g, gi) => {
+            const day = dayParts(g.iso);
+            const last = gi === groups.length - 1;
+            return (
+              <section key={g.key} aria-label={dayHeading(g.iso)} className="relative pb-5 pl-8 sm:pl-10">
+                {/* Timeline: a rail down the left with a dot for each day. */}
+                {!last && <span aria-hidden className="absolute bottom-0 left-[7px] top-4 w-0.5 rounded-full bg-[rgb(var(--border))] sm:left-[11px]" />}
+                <span aria-hidden className="absolute left-0.5 top-1.5 h-3.5 w-3.5 rounded-full border-[3px] border-[rgb(var(--bg))] bg-[rgb(var(--ink))] sm:left-1.5" />
 
-              <div className="rounded-2xl border border-border bg-surface shadow-card divide-y divide-border [&>*:first-child]:rounded-t-2xl [&>*:last-child]:rounded-b-2xl">
-                {g.list.map((t) => {
-                  const st = categoryStyle(t.categoryName, t.direction === 'debit');
-                  // Declared once and rendered in whichever of the two row
-                  // layouts is visible, so the pair can never drift apart.
-                  const actions = (
-                    <>
-                      <button
-                        onClick={() => setEditing(editing === t.id ? null : t.id)}
-                        className={editing === t.id ? 'icon-btn-accent bg-[rgb(var(--ink))] text-white' : 'icon-btn-accent'}
-                        aria-label={editing === t.id ? `Close editor for ${t.label}` : `Edit ${t.label}`}
-                        title={editing === t.id ? 'Close' : 'Edit'}
-                      >
-                        <Icon name={editing === t.id ? 'close' : 'edit'} size={15} />
-                      </button>
-                      <button
-                        onClick={() => remove(t)}
-                        className="icon-btn-danger"
-                        aria-label={`Delete ${t.label}`}
-                        title="Delete"
-                      >
-                        <Icon name="trash" size={15} />
-                      </button>
-                    </>
-                  );
-                  return (
-                  <div
-                    key={t.id}
-                    className={`p-3 transition-colors ${
-                      editing === t.id
-                        ? 'bg-surface-2/70 ring-2 ring-inset ring-[rgb(var(--ink))]'
-                        : 'hover:bg-surface-2/60'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3 sm:items-center sm:gap-3.5">
-                      {/* Category tile — the row's colour anchor, so a glance
-                          down the list reads as categories, not grey text. */}
-                      <span
-                        className="tile h-11 w-11 shrink-0 rounded-2xl text-white"
-                        style={{ background: t.categoryId ? st.solid : 'rgb(var(--muted-soft))' }}
-                      >
-                        <Icon name={t.categoryId ? st.icon : 'other'} size={20} />
-                      </span>
+                <div data-animate className="mb-1.5 flex flex-wrap items-baseline gap-x-2">
+                  <h2 className="font-display text-lg font-bold">{day.lead}</h2>
+                  <span className="text-sm font-medium text-text">{day.date}</span>
+                  <span className="ml-auto text-right text-xs text-muted">
+                    {g.list.length} {g.list.length === 1 ? 'payment' : 'payments'} ·{' '}
+                    <span className={`tabular font-semibold ${g.net >= 0 ? 'text-credit' : 'text-debit'}`}>
+                      {g.net >= 0 ? '+' : '−'}
+                      {inr(Math.abs(g.net))}
+                    </span>
+                  </span>
+                </div>
 
-                      <div className="min-w-0 flex-1">
-                        {/* On phones the amount sits beside the label: the old
-                            single-row layout left the label and every capsule
-                            sharing a ~53px column, so both were unreadable. */}
-                        <div className="flex items-start gap-2">
-                          <div className="min-w-0 flex-1 truncate pr-1 text-[15px] font-bold">{t.label}</div>
-                          <div className={`shrink-0 text-right text-[15px] font-extrabold tabular sm:hidden ${t.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
-                            {t.direction === 'debit' ? '−' : '+'}{inr(t.amount)}
+                <ul className="flex flex-col">
+                  {g.list.map((t) => {
+                    const st = categoryStyle(t.categoryName, t.direction === 'debit');
+                    const isEditing = editing === t.id;
+                    return (
+                      <li key={t.id} data-animate className={`group -mx-3 rounded-2xl transition-colors ${isEditing ? 'bg-surface-2' : 'hover:bg-surface-2/70'}`}>
+                        <div className="flex items-center gap-3.5 px-3 py-3">
+                          <span
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
+                            style={{ background: t.categoryId ? st.soft : 'rgb(var(--surface-2))', color: t.categoryId ? st.ink : 'rgb(var(--muted))' }}
+                          >
+                            <Icon name={t.categoryId ? st.icon : 'other'} size={19} />
+                          </span>
+
+                          {/* Name, then tags and meta underneath — a list item, not table columns. */}
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[15px] font-semibold">{t.label}</div>
+                            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                              <CategoryTag category={t.categoryName} subcategory={t.subcategoryName} isExpense={t.direction === 'debit'} locked={t.categoryLocked} />
+                              {t.isCreditCard && (
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-[rgb(var(--ink))] px-2 py-0.5 font-semibold text-amber">
+                                  <Icon name="creditcard" size={12} /> Card
+                                </span>
+                              )}
+                              {!t.isCreditCard && t.direction === 'debit' && t.subcategoryName === 'Credit card bill' && (
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-sky px-2 py-0.5 font-semibold text-[rgb(var(--peri-2))]">
+                                  <Icon name="check" size={12} /> Bill paid
+                                </span>
+                              )}
+                              {t.isRecurring && (
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-surface-2 px-2 py-0.5 font-semibold">
+                                  <Icon name="repeat" size={12} /> Recurring
+                                </span>
+                              )}
+                              <span className="whitespace-nowrap">
+                                <span className="tabular">{timeOf(t.occurredAt)}</span> · <span className="capitalize">{t.instrument}</span>
+                                {t.accountLast4 && <span className="tabular"> ··{t.accountLast4}</span>}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-1">
+                            <div className={`text-right text-[15px] font-semibold tabular ${t.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
+                              {t.direction === 'debit' ? '−' : '+'}
+                              {inr(t.amount)}
+                            </div>
+                            {/* Edit and delete, always visible. */}
+                            <div className="ml-1 flex items-center gap-1">
+                              <button
+                                onClick={() => setEditing(isEditing ? null : t.id)}
+                                className={`grid h-8 w-8 place-items-center rounded-lg transition-colors ${isEditing ? 'bg-[rgb(var(--ink))] text-white' : 'bg-surface-2 text-text hover:bg-[rgb(var(--border))]'}`}
+                                aria-label={isEditing ? `Close editor for ${t.label}` : `Edit ${t.label}`}
+                                title={isEditing ? 'Close' : 'Edit'}
+                              >
+                                <Icon name={isEditing ? 'close' : 'edit'} size={15} />
+                              </button>
+                              <button
+                                onClick={() => remove(t)}
+                                className="grid h-8 w-8 place-items-center rounded-lg bg-[#FBE3D3] text-[#9A3412] transition-colors hover:bg-debit hover:text-white"
+                                aria-label={`Delete ${t.label}`}
+                                title="Delete"
+                              >
+                                <Icon name="trash" size={15} />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs font-semibold text-muted">
-                          <span className="tabular">{timeOf(t.occurredAt)}</span>
-                          <span className="text-muted-soft">·</span>
-                          <span className="capitalize">{t.instrument}</span>
-                          {t.accountLast4 && (
-                            <>
-                              <span className="text-muted-soft">·</span>
-                              <span className="font-mono">··{t.accountLast4}</span>
-                            </>
-                          )}
-                        </div>
-
-                        {/* Capsules live inside the centred row so the icon
-                            tile and the amount align to the block's middle. */}
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          <CategoryCapsule
-                            category={t.categoryName}
-                            subcategory={t.subcategoryName}
-                            isExpense={t.direction === 'debit'}
-                            locked={t.categoryLocked}
-                          />
-                          {t.isCreditCard && (
-                            <span
-                              className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-bold"
-                              style={{ color: '#3A4B87', boxShadow: 'inset 0 0 0 1px #8095F240, 0 1px 2px rgb(26 28 31 / 0.06)' }}
-                            >
-                              <Icon name="creditcard" size={13} style={{ color: '#8095F2' }} /> Credit card
-                            </span>
-                          )}
-                          {!t.isCreditCard && t.direction === 'debit' && t.subcategoryName === 'Credit card bill' && (
-                            <span
-                              className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-bold"
-                              style={{ color: '#2F6B4F', boxShadow: 'inset 0 0 0 1px #4CAF8240, 0 1px 2px rgb(26 28 31 / 0.06)' }}
-                            >
-                              <Icon name="check" size={13} style={{ color: '#4CAF82' }} /> Card bill paid
-                            </span>
-                          )}
-                          {t.isRecurring && (
-                            <span
-                              className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-bold"
-                              style={{ color: '#5B4A85', boxShadow: 'inset 0 0 0 1px #A78BC440, 0 1px 2px rgb(26 28 31 / 0.06)' }}
-                            >
-                              <Icon name="repeat" size={13} style={{ color: '#A78BC4' }} /> Recurring
-                            </span>
-                          )}
-                          {/* Phones: actions ride at the end of the capsule
-                              row instead of stealing width from it. */}
-                          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:hidden">{actions}</div>
-                        </div>
-                      </div>
-
-                      <div className={`hidden shrink-0 text-right text-base font-extrabold tabular sm:block sm:text-[17px] ${t.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
-                        {t.direction === 'debit' ? '−' : '+'}{inr(t.amount)}
-                      </div>
-
-                      <div className="hidden shrink-0 items-center gap-1.5 sm:flex">{actions}</div>
-                    </div>
 
                     {editing === t.id && (
-                      <div className="mt-3 space-y-3">
+                      <div className="space-y-3 px-3 pb-4 sm:pl-[61px]">
                         <label className="flex items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2.5 text-sm cursor-pointer">
                           <input
                             type="checkbox"
@@ -486,17 +468,20 @@ export default function TransactionsPage() {
                           merchant={t.merchant}
                           currentCategoryId={t.categoryId}
                           currentSubcategoryId={t.subcategoryId}
-                          onDone={() => { setEditing(null); load(); }}
+                          onDone={() => { setEditing(null); load(); window.dispatchEvent(new Event(DATA_CHANGED_EVENT)); }}
                           onCancel={() => setEditing(null)}
                         />
                       </div>
                     )}
-                  </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {/* Dotted divider closing each day. */}
+                {!last && <div aria-hidden className="mt-4 border-t-2 border-dotted border-[rgb(var(--border))]" />}
+              </section>
+            );
+          })}
         </div>
       )}
 
@@ -512,7 +497,7 @@ export default function TransactionsPage() {
       <section id="deleted" className="scroll-mt-20 pt-2">
         <button
           onClick={() => setShowDeleted((v) => !v)}
-          className="flex w-full items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3 text-left text-sm font-semibold transition-colors hover:bg-surface-2"
+          className="flex w-full items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3 text-left text-sm font-semibold transition-colors hover:border-[rgb(var(--text))]/40"
         >
           <Icon name="chevron" size={15} className={`text-muted transition-transform duration-200 ${showDeleted ? 'rotate-90' : ''}`} />
           Deleted transactions

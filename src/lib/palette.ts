@@ -17,12 +17,12 @@ export const PALETTE = [
   '#C97B63', // clay
 ];
 
-export const INK = '#1E2026';
-export const AMBER = '#F5B841';
-export const PERI = '#8095F2';
-export const CREDIT = '#2A8A69';
-export const DEBIT = '#D6584E';
-export const MUTED = '#7A808A';
+export const INK = '#0D1014';
+export const AMBER = '#CBF24A';
+export const PERI = '#1D5FC4';
+export const CREDIT = '#1D5FC4';
+export const DEBIT = '#B4400C';
+export const MUTED = '#5B6270';
 
 /* ───────────────────────────────────────────────────────────────────────────
    Category identity — one colour and one icon per category, keyed by NAME.

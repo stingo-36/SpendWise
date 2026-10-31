@@ -40,41 +40,38 @@ export default function RecentTransactions({ month }: { month: string }) {
   }, [month]);
 
   return (
-    <section className="card lift p-4 sm:p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-[15px] font-bold">Recent activity</h2>
-        <Link href="/transactions" className="text-xs font-semibold text-accent hover:underline">
+    <section className="card overflow-hidden p-0">
+      <div className="flex items-center justify-between px-5 pb-2 pt-5">
+        <h2 className="h-section">Recent activity</h2>
+        <Link href="/transactions" className="text-xs font-semibold text-[rgb(var(--peri))] hover:underline">
           View all →
         </Link>
       </div>
       {loading ? (
-        <div className="text-sm text-muted">Loading…</div>
+        <div className="px-5 pb-5 text-sm text-muted">Loading…</div>
       ) : items.length === 0 ? (
-        <div className="text-sm text-muted">Nothing this month yet.</div>
+        <div className="px-5 pb-5 text-sm text-muted">Nothing this month yet.</div>
       ) : (
         <ul className="divide-y divide-border">
           {items.map((t) => {
             // The category's own glyph and colour, matching the transactions
-            // list and the charts — the bare ↑/↓ arrows said nothing about
-            // what the money was for.
+            // list and the charts.
             const st = categoryStyle(t.categoryName, t.direction === 'debit');
             return (
-              <li key={t.id} className="flex items-center gap-3 py-2.5">
+              <li key={t.id} className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-surface-2/50">
                 <span
-                  className="tile h-9 w-9 shrink-0 rounded-xl text-white"
-                  style={{ background: t.categoryName ? st.solid : 'rgb(var(--muted-soft))' }}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
+                  style={{ background: t.categoryName ? st.soft : 'rgb(var(--surface-2))', color: t.categoryName ? st.ink : 'rgb(var(--muted))' }}
                 >
-                  <Icon name={t.categoryName ? st.icon : 'other'} size={16} />
+                  <Icon name={t.categoryName ? st.icon : 'other'} size={17} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold">{t.label}</div>
-                  <div className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-muted">
-                    <span>{fmtDate(t.occurredAt)}</span>
-                    <span className="text-muted-soft">·</span>
-                    <span style={t.categoryName ? { color: st.ink } : undefined}>{t.categoryName ?? 'Uncategorized'}</span>
+                  <div className="truncate text-sm font-semibold">{t.label}</div>
+                  <div className="mt-0.5 truncate text-xs text-muted">
+                    {fmtDate(t.occurredAt)} · {t.categoryName ?? 'Needs category'}
                   </div>
                 </div>
-                <div className={`text-sm font-extrabold tabular ${t.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
+                <div className={`shrink-0 text-sm font-semibold tabular ${t.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
                   {t.direction === 'debit' ? '−' : '+'}
                   {inr(t.amount)}
                 </div>

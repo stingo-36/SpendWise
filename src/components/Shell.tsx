@@ -9,7 +9,8 @@ import SyncStatus from './SyncStatus';
 // Full-bleed layout for auth pages; app chrome (nav + banner) for everything else.
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const bare = pathname === '/' || pathname === '/login' || pathname === '/signup';
+  // Onboarding is signed-in but full-screen: it has its own header and progress.
+  const bare = pathname === '/' || pathname === '/login' || pathname === '/signup' || pathname === '/onboarding';
   // The admin console manages accounts, not a mailbox: no Gmail banner or auto-sync.
   const admin = pathname === '/admin' || pathname.startsWith('/admin/');
 
@@ -20,8 +21,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       {!admin && <AutoSync />}
       {!admin && <SyncStatus />}
       <Nav />
-      <main className="lg:pl-[264px] min-h-screen pt-14 lg:pt-0">
-        <div className="mx-auto max-w-[1600px] px-safe py-5 pb-10 sm:px-6 lg:px-8">
+      {/* Bottom padding clears the phone tab bar. */}
+      <main className="min-h-screen pb-28 lg:pb-0 lg:pl-[248px]">
+        <div className="mx-auto max-w-[1440px] px-safe pb-10 pt-5 sm:px-6 sm:pt-7 lg:px-10">
           {!admin && <GmailBanner />}
           {children}
         </div>

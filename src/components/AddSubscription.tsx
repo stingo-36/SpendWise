@@ -124,7 +124,7 @@ export default function AddSubscription({
         </div>
 
         <div className="px-5 pt-4">
-          <div className="inline-flex w-full rounded-full border border-border bg-surface-2 p-0.5 text-sm">
+          <div className="seg w-full">
             {(
               [
                 ['manual', 'Enter details'],
@@ -134,7 +134,7 @@ export default function AddSubscription({
               <button
                 key={m}
                 onClick={() => { setMode(m); setError(null); }}
-                className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 ${mode === m ? 'bg-surface font-medium shadow-sm' : 'text-muted'}`}
+                className={`seg-btn flex-1 ${mode === m ? 'seg-on' : ''}`}
               >
                 {label}
               </button>

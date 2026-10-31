@@ -2,33 +2,37 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import Icon from './Icon';
 import InstallApp from './InstallApp';
+import AddTransaction from './AddTransaction';
+import { getSyncState, runSync, subscribeSync } from '@/lib/syncClient';
+import { ADMIN_LINKS, DATA_CHANGED_EVENT, NAV_GROUPS, TAB_LINKS, isActivePath, tabFor } from '@/lib/navLinks';
 
-const LINKS = [
-  { href: '/dashboard', label: 'Overview', icon: 'overview' },
-  { href: '/transactions', label: 'Transactions', icon: 'transactions' },
-  { href: '/budget', label: 'Budget', icon: 'budget' },
-  { href: '/credit-card', label: 'Credit Card', icon: 'creditcard' },
-  { href: '/review', label: 'Review', icon: 'review' },
-  { href: '/keywords', label: 'Keywords', icon: 'keywords' },
-  { href: '/subscriptions', label: 'Subscriptions', icon: 'subscriptions' },
-  { href: '/notes', label: 'Notes', icon: 'note' },
-  { href: '/parser-health', label: 'Parsers', icon: 'parsers' },
-  { href: '/settings', label: 'Settings', icon: 'settings' },
-];
-const ADMIN_LINKS = [
-  { href: '/admin', label: 'Users', icon: 'users' },
-  { href: '/admin/settings', label: 'App settings', icon: 'settings' },
-];
+/** "2 min ago" — short enough for the sidebar footer. */
+function ago(iso: string | null): string {
+  if (!iso) return 'Not synced yet';
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'Synced just now';
+  if (mins < 60) return `Synced ${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `Synced ${hrs} h ago`;
+  return `Synced ${Math.round(hrs / 24)} d ago`;
+}
 
+/**
+ * App chrome: a dark sidebar grouped Money / Plan / Tidy / System on desktop,
+ * and a bottom tab bar on phones (Home, Activity, +, Cards, More) where the
+ * rest of the pages live behind More.
+ */
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const links = isAdmin ? ADMIN_LINKS : LINKS;
+  const [inbox, setInbox] = useState(0);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const sync = useSyncExternalStore(subscribeSync, getSyncState, getSyncState);
 
   useEffect(() => {
     fetch('/api/me')
@@ -36,8 +40,28 @@ export default function Nav() {
       .then((d) => setIsAdmin(!!d?.isAdmin))
       .catch(() => {});
   }, []);
-  // '/admin' is a parent of '/admin/settings', so it only matches exactly.
-  const isActive = (href: string) => pathname === href || (href !== '/admin' && pathname.startsWith(href + '/'));
+
+  // Inbox count and last sync for the footer; refreshed after every sync,
+  // page change, and whenever a page reports it changed transactions.
+  const [changed, setChanged] = useState(0);
+  useEffect(() => {
+    const bump = () => setChanged((n) => n + 1);
+    window.addEventListener(DATA_CHANGED_EVENT, bump);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, bump);
+  }, []);
+  useEffect(() => {
+    if (isAdmin) return;
+    fetch('/api/status', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setInbox(d.counts?.reviewQueue ?? 0);
+        setLastSync(d.lastSyncAt ?? null);
+      })
+      .catch(() => {});
+  }, [isAdmin, sync.finishedAt, pathname, changed]);
+
+  const isActive = (href: string) => isActivePath(pathname, href);
 
   // The admin account has no spending of its own, so any other page is empty
   // for it — e.g. after login sent it back to ?next=/dashboard.
@@ -45,20 +69,6 @@ export default function Nav() {
     if (isAdmin && !ADMIN_LINKS.some((l) => isActive(l.href))) router.replace('/admin');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, pathname]);
-
-  // Close the drawer whenever the route changes.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
-  // Lock body scroll while the drawer is open.
-  useEffect(() => {
-    if (open) document.body.style.overflow = 'hidden';
-    else document.body.style.overflow = '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [open]);
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST' });
@@ -68,74 +78,137 @@ export default function Nav() {
     router.refresh();
   }
 
-  const Content = (
-    <div className="flex h-full flex-col px-3 py-5">
-      <div className="flex items-center gap-2.5 px-2 mb-7">
-        <div className="grid h-9 w-9 place-items-center rounded-2xl bg-amber text-[rgb(var(--ink))] text-lg font-bold">₹</div>
-        <div>
-          <div className="text-[15px] font-semibold leading-tight text-white">Spendwise</div>
-          <div className="text-xs text-[rgb(var(--sidebar-muted))]">{isAdmin ? 'Admin console' : 'Expense tracker'}</div>
-        </div>
-      </div>
-      <nav className="flex flex-col gap-1">
-        {links.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className={`group flex items-center gap-3 rounded-full px-3.5 py-2.5 text-sm transition-colors ${
-              isActive(l.href) ? 'bg-amber text-[rgb(var(--ink))] font-semibold' : 'text-[rgb(var(--sidebar-muted))] hover:bg-white/[0.07] hover:text-white'
-            }`}
-          >
-            <Icon name={l.icon} size={18} className="shrink-0" />
-            {l.label}
-          </Link>
-        ))}
-      </nav>
-      <div className="mt-auto space-y-2">
-        <InstallApp
-          className="flex w-full items-center gap-3 rounded-full px-3.5 py-2.5 text-sm text-[rgb(var(--sidebar-muted))] transition-colors hover:bg-white/[0.06] hover:text-white"
-          label="Install app"
-        />
-        <button onClick={logout} className="flex w-full items-center gap-3 rounded-full px-3.5 py-2.5 text-sm text-[rgb(var(--sidebar-muted))] transition-colors hover:bg-white/[0.06] hover:text-white">
-          <Icon name="logout" size={18} className="shrink-0" />
-          Sign out
-        </button>
-        <div className="px-3 text-[11px] text-[rgb(var(--sidebar-muted))]/70">{isAdmin ? 'Signed in as admin' : 'Read-only · self-hosted'}</div>
-      </div>
-    </div>
+  const navItem = (l: { href: string; label: string; icon: string }) => (
+    <Link
+      key={l.href}
+      href={l.href}
+      aria-current={isActive(l.href) ? 'page' : undefined}
+      className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 text-sm transition-colors ${
+        isActive(l.href) ? 'bg-amber font-semibold text-[rgb(var(--ink))]' : 'text-[rgb(var(--sidebar-muted))] hover:bg-white/[0.07] hover:text-white'
+      }`}
+    >
+      <Icon name={l.icon} size={18} className="shrink-0" />
+      {l.label}
+      {l.href === '/review' && inbox > 0 && (
+        <span
+          className={`ml-auto rounded-full px-1.5 py-0.5 font-mono text-[11px] font-semibold ${
+            isActive(l.href) ? 'bg-[rgb(var(--ink))] text-amber' : 'bg-[#E8833A] text-[rgb(var(--ink))]'
+          }`}
+        >
+          {inbox}
+        </span>
+      )}
+    </Link>
   );
 
   return (
     <>
-      {/* Mobile / tablet top bar with hamburger (< lg) */}
-      <div className="lg:hidden fixed top-0 inset-x-0 z-40 h-14 flex items-center gap-3 px-safe border-b border-border bg-surface/95 backdrop-blur">
-        <button onClick={() => setOpen(true)} aria-label="Open menu" className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2 text-text">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
-        </button>
-        <div className="flex items-center gap-2">
-          <div className="grid h-7 w-7 place-items-center rounded-xl bg-amber text-[rgb(var(--ink))] text-sm font-bold">₹</div>
-          <span className="font-semibold">Spendwise</span>
-        </div>
-      </div>
-
       {/* Desktop sidebar (lg+) */}
-      <aside className="hidden lg:flex lg:w-60 lg:flex-col lg:fixed lg:inset-y-3 lg:left-3 lg:rounded-[28px] bg-[rgb(var(--sidebar))] shadow-ink">
-        {Content}
+      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-[248px] lg:flex-col lg:gap-5 lg:overflow-y-auto bg-[rgb(var(--sidebar))] px-3.5 py-6">
+        <Link href={isAdmin ? '/admin' : '/dashboard'} className="flex items-center gap-2.5 px-2 font-display text-[21px] font-extrabold text-white">
+          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-amber text-[17px] text-[rgb(var(--ink))]">₹</span>
+          SpendWise
+        </Link>
+        {isAdmin ? (
+          <>
+            <span className="ml-2 self-start rounded-full bg-[rgb(var(--ink-2))] px-2.5 py-1 text-xs font-semibold text-amber">Admin console</span>
+            <nav aria-label="Admin" className="flex flex-col gap-0.5">
+              <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[rgb(var(--sidebar-muted))]/80">Admin</div>
+              {ADMIN_LINKS.map(navItem)}
+            </nav>
+          </>
+        ) : (
+          NAV_GROUPS.map((g) => (
+            <nav key={g.label} aria-label={g.label} className="flex flex-col gap-0.5">
+              <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[rgb(var(--sidebar-muted))]/80">{g.label}</div>
+              {g.links.map(navItem)}
+            </nav>
+          ))
+        )}
+        <div className="mt-auto flex flex-col gap-2.5 rounded-2xl bg-white/[0.05] p-3 text-xs">
+          {!isAdmin && (
+            <>
+              <div className="flex items-center gap-2 font-semibold text-white">
+                <span className={`h-2 w-2 rounded-full ${sync.running ? 'animate-pulse bg-amber' : 'bg-amber'}`} />
+                {sync.running ? 'Syncing…' : ago(lastSync)}
+              </div>
+              <button
+                onClick={() => runSync()}
+                disabled={sync.running}
+                className="btn min-h-10 border border-white/10 bg-[rgb(var(--ink-2))] text-white hover:bg-white/10"
+              >
+                <Icon name="repeat" size={14} className={sync.running ? 'animate-spin' : undefined} />
+                {sync.running ? 'Syncing…' : 'Sync now'}
+              </button>
+              <InstallApp className="flex items-center gap-2 rounded-lg px-1 py-1 text-[rgb(var(--sidebar-muted))] hover:text-white" label="Install app" />
+            </>
+          )}
+          <button onClick={logout} className="flex items-center gap-2 rounded-lg px-1 py-1 text-left text-[rgb(var(--sidebar-muted))] hover:text-white">
+            <Icon name="logout" size={15} />
+            Sign out
+          </button>
+        </div>
       </aside>
 
-      {/* Mobile / tablet drawer */}
-      {open && (
-        <div className="lg:hidden fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setOpen(false)} />
-          {/* Scrolls: ten links plus the footer don't fit a landscape phone,
-              and the notch eats the left edge under viewportFit: 'cover'. */}
-          <aside className="absolute left-0 inset-y-0 w-72 max-w-[82vw] overflow-y-auto bg-[rgb(var(--sidebar))] pl-[env(safe-area-inset-left)] shadow-2xl rounded-r-[28px] animate-slide-in">
-            <button onClick={() => setOpen(false)} aria-label="Close menu" className="absolute top-4 right-3 grid h-8 w-8 place-items-center rounded-lg text-[rgb(var(--sidebar-muted))] hover:bg-white/10 hover:text-white">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      {/* Phone / tablet bottom tab bar (< lg) */}
+      <nav
+        aria-label="Main"
+        className="lg:hidden fixed inset-x-0 bottom-0 z-40 flex items-center justify-around bg-[rgb(var(--ink))] px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      >
+        {isAdmin ? (
+          <>
+            {ADMIN_LINKS.map((l) => (
+              <Link key={l.href} href={l.href} className={`flex min-w-[88px] flex-col items-center gap-0.5 py-1.5 text-[11px] font-semibold ${isActive(l.href) ? 'text-amber' : 'text-[rgb(var(--sidebar-muted))]'}`}>
+                <Icon name={l.icon} size={22} />
+                {l.label}
+              </Link>
+            ))}
+            <button onClick={logout} className="flex min-w-[88px] flex-col items-center gap-0.5 py-1.5 text-[11px] font-semibold text-[rgb(var(--sidebar-muted))]">
+              <Icon name="logout" size={22} />
+              Sign out
             </button>
-            {Content}
-          </aside>
-        </div>
+          </>
+        ) : (
+          TAB_LINKS.map((t, i) => {
+            const on = tabFor(pathname) === t.href;
+            const tab = (
+              <Link
+                key={t.href}
+                href={t.href}
+                aria-current={on ? 'page' : undefined}
+                className={`relative flex min-w-[56px] flex-col items-center gap-0.5 py-1.5 text-[11px] font-semibold ${on ? 'text-amber' : 'text-[rgb(var(--sidebar-muted))]'}`}
+              >
+                <Icon name={t.icon} size={22} />
+                {t.label}
+                {t.href === '/more' && inbox > 0 && <span className="absolute right-2 top-0.5 h-2 w-2 rounded-full bg-[#E8833A]" aria-label={`${inbox} in Inbox`} />}
+              </Link>
+            );
+            // The add button sits in the middle of the bar.
+            return i === 2
+              ? [
+                  <button
+                    key="add"
+                    onClick={() => setAdding(true)}
+                    aria-label="Add transaction"
+                    className="-mt-7 grid h-14 w-14 place-items-center rounded-[18px] bg-amber text-[rgb(var(--ink))] shadow-ink active:scale-95"
+                  >
+                    <Icon name="plus" size={26} strokeWidth={2.2} />
+                  </button>,
+                  tab,
+                ]
+              : tab;
+          })
+        )}
+      </nav>
+
+      {adding && (
+        <AddTransaction
+          onAdded={() => {
+            window.dispatchEvent(new Event(DATA_CHANGED_EVENT));
+            router.refresh();
+          }}
+          onClose={() => setAdding(false)}
+        />
       )}
     </>
   );
