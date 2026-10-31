@@ -23,7 +23,7 @@ export default function SignupPage() {
       body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
-      router.push('/settings?welcome=1');
+      router.push('/onboarding');
       router.refresh();
     } else {
       const msg = await res

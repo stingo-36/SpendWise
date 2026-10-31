@@ -5,6 +5,7 @@ import { inr } from '@/lib/format';
 import { useCategories } from '@/lib/useCategories';
 import Reveal from '@/components/Reveal';
 import { CategoryDropdown } from '@/components/Select';
+import { categoryColor } from '@/lib/palette';
 
 interface B {
   budgetId: number;
@@ -16,8 +17,8 @@ interface B {
 
 function barColor(pct: number) {
   if (pct >= 100) return 'bg-debit';
-  if (pct >= 80) return 'bg-amber';
-  return 'bg-credit';
+  if (pct >= 80) return 'bg-[#E8833A]';
+  return 'bg-[rgb(var(--ink))]';
 }
 
 export default function BudgetPage() {
@@ -70,34 +71,95 @@ export default function BudgetPage() {
   const budgetedIds = new Set(budgets.map((b) => b.categoryId));
   const available = categories.filter((c) => !budgetedIds.has(c.id));
 
+  // How far through the month we are — the pace marker on each bar.
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const pace = Math.round((now.getDate() / daysInMonth) * 100);
+  const over = budgets.filter((b) => b.spent > b.budget).length;
+  const left = totalBudget - totalSpent;
+
   return (
-    <div className="space-y-5">
-      <header className="animate-fade-up">
-        <h1 className="h-page">Budgets</h1>
-        <p className="text-sm text-muted mt-1">Set a monthly cap per category and track spending against it.</p>
+    <div className="space-y-4 sm:space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="eyebrow">
+            {now.toLocaleDateString('en-IN', { month: 'long' })} · day {now.getDate()} of {daysInMonth}
+          </div>
+          <h1 className="h-page mt-1.5">Budgets</h1>
+        </div>
+        <a href="#add-budget" className="btn-accent self-start px-4 sm:self-auto">
+          + New budget
+        </a>
       </header>
 
       {/* Summary */}
-      <Reveal className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="card p-4">
-          <div className="text-xs text-muted">Total budget</div>
-          <div className="text-xl font-bold tabular mt-1">{inr(totalBudget)}</div>
+      <Reveal className="card-hero flex flex-wrap items-center gap-6 p-5 sm:p-6">
+        <div className="min-w-[220px] flex-1">
+          <div className="eyebrow !text-[rgb(var(--sidebar-muted))]">Spent of {inr(totalBudget)} budgeted</div>
+          <div className="mt-2 font-display text-[clamp(2.5rem,6vw,3.5rem)] font-extrabold leading-none tabular">{inr(totalSpent)}</div>
         </div>
-        <div className="card p-4">
-          <div className="text-xs text-muted">Spent this month</div>
-          <div className="text-xl font-bold tabular mt-1">{inr(totalSpent)}</div>
-        </div>
-        <div className="card p-4">
-          <div className="text-xs text-muted">Remaining</div>
-          <div className={`text-xl font-bold tabular mt-1 ${totalBudget - totalSpent >= 0 ? 'text-credit' : 'text-debit'}`}>{inr(totalBudget - totalSpent)}</div>
+        <div className="flex min-w-[260px] flex-[2] flex-col gap-2.5">
+          <div className="h-3.5 overflow-hidden rounded-full bg-white/10">
+            <div
+              className={`h-full rounded-full ${left < 0 ? 'bg-[#F2A46B]' : 'bg-amber'}`}
+              style={{ width: `${totalBudget > 0 ? Math.min(100, (totalSpent / totalBudget) * 100) : 0}%` }}
+            />
+          </div>
+          <div className="flex flex-wrap justify-between gap-2 text-[13px] text-[rgb(var(--sidebar-muted))]">
+            <span>
+              <b className="text-white">{inr(Math.abs(left))}</b> {left >= 0 ? 'left' : 'over'}
+            </span>
+            <span>
+              {over} over · {budgets.length - over} on track
+            </span>
+            <span>Transfers and card bills excluded</span>
+          </div>
         </div>
       </Reveal>
 
-      {/* Add budget */}
-      <Reveal className="card relative z-30 p-4 sm:p-5" delay={40}>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
+        {budgets.map((b, i) => {
+          const pct = b.budget > 0 ? Math.round((b.spent / b.budget) * 100) : 0;
+          const isOver = pct >= 100;
+          return (
+            <Reveal key={b.budgetId} className={`card flex flex-col gap-3.5 p-5`} delay={i * 40}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span className="h-3 w-3 shrink-0 rounded-[4px]" style={{ background: categoryColor(b.categoryName) }} />
+                  <h2 className="h-section truncate">{b.categoryName}</h2>
+                </span>
+                <span className={`chip shrink-0 ${isOver ? 'bg-blush text-[#8A3109]' : pct > pace ? 'bg-sand text-[rgb(var(--amber-2))]' : 'bg-surface-2 text-text'}`}>
+                  {isOver ? `Over by ${inr(b.spent - b.budget)}` : pct > pace ? 'Ahead of pace' : 'On track'}
+                </span>
+              </div>
+              <div className="tabular text-xl font-semibold">
+                {inr(b.spent)} <span className="text-sm text-muted">/ {inr(b.budget)}</span>
+              </div>
+              <div className="relative h-3 rounded-full bg-surface-2">
+                <div className={`absolute inset-y-0 left-0 rounded-full ${barColor(pct)}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                {/* Where spending "should" be by today. */}
+                <span className="absolute -bottom-1 -top-1 w-0.5 rounded-sm bg-[rgb(var(--ink))]" style={{ left: `${pace}%` }} title={`Day ${now.getDate()} pace`} />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-muted">
+                  {pct}% used{isOver ? '' : ` · ${inr(Math.max(0, b.budget - b.spent))} left`}
+                </span>
+                <span className="flex items-center gap-1">
+                  <BudgetEdit current={b.budget} onSave={(amt) => save(b.categoryId, amt)} />
+                  <button onClick={() => save(b.categoryId, 0)} className="btn-ghost px-3 py-1.5 text-xs hover:text-debit">
+                    Remove
+                  </button>
+                </span>
+              </div>
+            </Reveal>
+          );
+        })}
+
+        {/* Add a budget — the last card in the grid */}
+        <section id="add-budget" className="relative z-30 flex scroll-mt-6 flex-col gap-3 rounded-[20px] border border-dashed border-muted-soft p-5">
+          <h2 className="h-section">{budgets.length ? 'Add a budget' : 'Set your first budget'}</h2>
           <div>
-            <label className="block text-xs text-muted mb-1.5">Category</label>
+            <label className="mb-1.5 block text-xs font-semibold">Category</label>
             <CategoryDropdown
               categories={available}
               value={{ categoryId: categoryId ? Number(categoryId) : null, subcategoryId: null }}
@@ -106,57 +168,13 @@ export default function BudgetPage() {
             />
           </div>
           <div>
-            <label className="block text-xs text-muted mb-1.5">Monthly budget (₹)</label>
+            <label className="mb-1.5 block text-xs font-semibold">Monthly cap (₹)</label>
             <input value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} inputMode="decimal" placeholder="e.g. 15000" className="input tabular" />
           </div>
-          <button onClick={add} disabled={busy} className="btn-primary h-[42px] w-full whitespace-nowrap sm:w-auto">Add budget</button>
-        </div>
-        {msg && <div className="mt-3 text-xs text-debit">{msg}</div>}
-      </Reveal>
-
-      {/* Budget list */}
-      {budgets.length === 0 ? (
-        <Reveal className="card p-6 sm:p-8 text-center text-muted" delay={80}>
-          No budgets yet. Add one above — try <span className="font-medium text-text">Food</span> or <span className="font-medium text-text">SIP</span>.
-        </Reveal>
-      ) : (
-        <div className="space-y-3">
-          {budgets.map((b, i) => {
-            const pct = b.budget > 0 ? Math.round((b.spent / b.budget) * 100) : 0;
-            return (
-              <Reveal key={b.budgetId} className="card p-4" delay={i * 50}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="font-medium">{b.categoryName}</div>
-                  <div className="text-sm tabular">
-                    <span className={pct >= 100 ? 'text-debit font-semibold' : ''}>{inr(b.spent)}</span>
-                    <span className="text-muted"> / {inr(b.budget)}</span>
-                  </div>
-                </div>
-                <div className="h-2.5 rounded-full bg-surface-2 overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-500 ${barColor(pct)}`} style={{ width: `${Math.min(100, pct)}%` }} />
-                </div>
-                {/* Stacks below xs: the caption plus an open editor never fit
-                    one 320px row — the text wrapped to three lines and the
-                    input, Save and Remove were crushed together. */}
-                <div className="mt-2 flex flex-col gap-2 xs:flex-row xs:items-center xs:justify-between">
-                  <div className="text-xs text-muted">
-                    {pct}% used{pct >= 100 ? ` · over by ${inr(b.spent - b.budget)}` : ` · ${inr(Math.max(0, b.budget - b.spent))} left`}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <BudgetEdit current={b.budget} onSave={(amt) => save(b.categoryId, amt)} />
-                    <button
-                      onClick={() => save(b.categoryId, 0)}
-                      className="btn-ghost px-3 py-1.5 text-xs hover:text-debit"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              </Reveal>
-            );
-          })}
-        </div>
-      )}
+          <button onClick={add} disabled={busy} className="btn-primary">Add budget</button>
+          {msg && <div className="text-xs text-debit">{msg}</div>}
+        </section>
+      </div>
     </div>
   );
 }

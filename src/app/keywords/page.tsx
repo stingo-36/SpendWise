@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCategories } from '@/lib/useCategories';
-import { categoryStyle, categoryBlurb, categoryDecor } from '@/lib/palette';
+import Link from 'next/link';
+import CategoryTag from '@/components/CategoryTag';
+import { categoryStyle } from '@/lib/palette';
 import { CategoryDropdown, type CategoryValue as Picked } from '@/components/Select';
 import Icon from '@/components/Icon';
 
@@ -15,8 +17,23 @@ interface Rule {
   subcategoryName: string | null;
   label: string | null;
   source: string;
+  global: boolean;
   hitCount: number;
 }
+
+type SourceTab = 'all' | 'mine' | 'learned' | 'builtin';
+
+/** Built-in = shared seed rules; Mine = added here; Learned = from your corrections. */
+function sourceOf(r: Rule): Exclude<SourceTab, 'all'> {
+  if (r.global) return 'builtin';
+  return r.source === 'manual' ? 'mine' : 'learned';
+}
+
+const SOURCE_CHIP: Record<Exclude<SourceTab, 'all'>, { label: string; cls: string }> = {
+  mine: { label: 'Mine', cls: 'bg-[rgb(var(--ink))] text-amber' },
+  learned: { label: 'Learned', cls: 'bg-sky text-[rgb(var(--peri-2))]' },
+  builtin: { label: 'Built-in', cls: 'bg-surface-2 text-muted' },
+};
 
 /**
  * Keyword rules: map a keyword to a category. Any transaction whose merchant
@@ -29,6 +46,8 @@ export default function KeywordsPage() {
   const [picked, setPicked] = useState<Picked>({ categoryId: null, subcategoryId: null });
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<SourceTab>('all');
+  const [q, setQ] = useState('');
 
   const load = useCallback(async () => {
     const d = await fetch('/api/rules').then((r) => r.json());
@@ -68,154 +87,175 @@ export default function KeywordsPage() {
     await load();
   }
 
-  const byCategory = useMemo(() => {
-    const m = new Map<string, Rule[]>();
-    for (const r of rules) {
-      const k = r.categoryName || 'Uncategorized';
-      if (!m.has(k)) m.set(k, []);
-      m.get(k)!.push(r);
-    }
-    // Sort within a category: grouped by subcategory, alphabetical inside each,
-    // and rules with no subcategory last — the list arrived in insertion order,
-    // so a new keyword landed wherever it happened to be created.
-    for (const list of m.values()) {
-      list.sort((a, b) => {
-        const as = a.subcategoryName ?? '\uffff';
-        const bs = b.subcategoryName ?? '\uffff';
-        if (as !== bs) return as.localeCompare(bs);
-        return a.pattern.localeCompare(b.pattern);
-      });
-    }
-    const order = categories.map((c) => c.name);
-    return Array.from(m.entries()).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
-  }, [rules, categories]);
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return rules
+      .filter((r) => (tab === 'all' || sourceOf(r) === tab) && (!term || r.pattern.toLowerCase().includes(term) || r.categoryName.toLowerCase().includes(term)))
+      .sort((a, b) => b.hitCount - a.hitCount || a.pattern.localeCompare(b.pattern));
+  }, [rules, tab, q]);
+  const counts = useMemo(() => {
+    const c = { all: rules.length, mine: 0, learned: 0, builtin: 0 };
+    for (const r of rules) c[sourceOf(r)]++;
+    return c;
+  }, [rules]);
 
   const isExpenseOf = (name: string) => categories.find((c) => c.name === name)?.isExpense ?? true;
 
   return (
-    <div className="space-y-5">
-      <header className="animate-fade-up">
-        <h1 className="h-page">Keywords</h1>
-        <p className="text-sm text-muted mt-1">
-          Map keywords to categories. If a transaction’s merchant contains the keyword, it’s filed automatically —
-          e.g. <span className="font-semibold text-text">hotel, restaurant, bar</span> → Food.
-        </p>
+    <div className="space-y-4 sm:space-y-5">
+      <header>
+        <div className="eyebrow">{rules.length} rules · if the merchant contains the keyword, it’s filed automatically</div>
+        <h1 className="h-page mt-1.5">Rules</h1>
       </header>
 
-      {/* Add form — category and subcategory in one dropdown. */}
-      <section className="card animate-fade-up relative z-30 p-4 sm:p-5" style={{ animationDelay: '60ms' }}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">Keyword</label>
-            <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && add()}
-              placeholder="e.g. restaurant"
-              className="input"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted">Files into</label>
+      {/* New rule, written as a sentence. Not overflow-hidden: the category
+          menu has to drop out of the panel. */}
+      <section className="relative z-30 flex flex-col gap-4 rounded-[20px] bg-[rgb(var(--ink))] p-5 text-white sm:p-6">
+        <h2 className="h-section">New rule</h2>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
+          <span className="font-display text-lg font-semibold sm:text-[22px]">When the merchant contains</span>
+          <input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            placeholder="e.g. restaurant"
+            aria-label="Keyword"
+            className="input w-full text-base text-text sm:w-56"
+          />
+          <span className="font-display text-lg font-semibold sm:text-[22px]">file it under</span>
+          {/* text-text: the menu would otherwise inherit the panel's white text. */}
+          <div className="w-full text-base text-text sm:w-64">
             <CategoryDropdown categories={categories} value={picked} onChange={setPicked} placeholder="Pick a category" />
           </div>
-          <button onClick={add} disabled={busy || picked.categoryId == null} className="btn-primary">
-            <Icon name="plus" size={15} /> {busy ? 'Adding…' : 'Add keyword'}
+          <button onClick={add} disabled={busy || picked.categoryId == null || !keyword.trim()} className="btn-accent w-full px-6 sm:ml-auto sm:w-auto">
+            {busy ? 'Saving…' : 'Save rule'}
           </button>
         </div>
-
+        <span className="text-[13px] text-[rgb(var(--sidebar-muted))]">Applies to past payments too, and to every sync after this.</span>
         {msg && (
-          <div
-            className={`mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${
-              msg.ok ? 'bg-mint text-[rgb(var(--credit))]' : 'bg-blush text-[rgb(var(--debit))]'
-            }`}
-          >
+          <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${msg.ok ? 'bg-white/10 text-amber' : 'bg-blush text-[#8A3109]'}`}>
             <Icon name={msg.ok ? 'check' : 'alert'} size={14} /> {msg.text}
           </div>
         )}
       </section>
 
-      {/* Existing rules grouped by category */}
-      <div className="space-y-4">
-        {byCategory.map(([cat, list], idx) => {
-          const isExpense = isExpenseOf(cat);
-          const st = categoryStyle(cat, isExpense);
-          const decor = categoryDecor(cat, isExpense);
-          return (
-            <section
-              key={cat}
-              className="card animate-fade-up relative overflow-hidden"
-              style={{ animationDelay: `${120 + idx * 50}ms` }}
-            >
-              {/* Left accent stripe — the category's colour running the card. */}
-              <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: st.solid }} aria-hidden />
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <section className="card overflow-hidden p-0">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-2 pt-4 sm:px-5">
+            <div className="seg" role="tablist" aria-label="Source">
+              {(
+                [
+                  ['all', 'All'],
+                  ['mine', 'Mine'],
+                  ['learned', 'Learned'],
+                  ['builtin', 'Built-in'],
+                ] as [SourceTab, string][]
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  role="tab"
+                  aria-selected={tab === v}
+                  onClick={() => setTab(v)}
+                  className={`seg-btn min-h-9 ${tab === v ? 'seg-on' : ''}`}
+                >
+                  {label} <span className="tabular text-xs text-muted">{counts[v]}</span>
+                </button>
+              ))}
+            </div>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search rules" aria-label="Search rules" className="input w-full sm:w-56" />
+          </div>
+          {shown.length === 0 ? (
+            <p className="px-5 py-10 text-center text-sm text-muted">No rules here yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.07em] text-muted">
+                    <th className="px-5 py-2.5 font-semibold">Keyword</th>
+                    <th className="px-3 py-2.5 font-semibold">Files into</th>
+                    <th className="px-3 py-2.5 font-semibold">Source</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Hits</th>
+                    <th className="px-5 py-2.5 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {shown.map((r) => {
+                    const src = sourceOf(r);
+                    return (
+                      <tr key={r.id} className="group hover:bg-surface-2/50">
+                        <td className="tabular px-5 py-2.5 font-semibold">{r.pattern}</td>
+                        <td className="px-3 py-2.5">
+                          <CategoryTag category={r.categoryName || null} subcategory={r.subcategoryName} isExpense={isExpenseOf(r.categoryName)} />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`chip ${SOURCE_CHIP[src].cls}`}>{SOURCE_CHIP[src].label}</span>
+                        </td>
+                        <td className="tabular px-3 py-2.5 text-right text-muted">{r.hitCount}</td>
+                        <td className="px-5 py-2.5 text-right">
+                          {/* Built-in rules can be removed too (the API allows it). */}
+                          {(
+                            <button
+                              onClick={() => remove(r.id)}
+                              className="ml-auto grid h-9 w-9 place-items-center rounded-lg bg-[#FBE3D3] text-[#9A3412] transition-colors hover:bg-debit hover:text-white"
+                              aria-label={`Remove ${r.pattern}`}
+                              title="Remove"
+                            >
+                              <Icon name="trash" size={15} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
-              {/* Watermark cluster: the category's own glyphs, faint, sitting
-                  beside the heading rather than behind the chip panel. */}
-              <div
-                className="pointer-events-none absolute right-5 top-2 hidden select-none items-end gap-3 md:flex"
-                style={{ color: st.solid }}
-                aria-hidden
-              >
-                <Icon name={decor[2]} size={44} className="opacity-[0.09]" strokeWidth={1.2} />
-                <Icon name={decor[1]} size={62} className="opacity-[0.11]" strokeWidth={1.1} />
-                <Icon name={decor[0]} size={80} className="opacity-[0.13]" strokeWidth={1} />
-              </div>
-
-              <div className="relative p-4 pl-5 sm:p-5 sm:pl-6">
-                <div className="flex items-center gap-3">
-                  <span className="tile h-12 w-12 shrink-0 text-white shadow-sm" style={{ background: st.solid }}>
-                    <Icon name={st.icon} size={22} />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="h-section" style={{ color: st.ink }}>{cat}</h2>
-                      <span
-                        className="rounded-full px-2.5 py-0.5 text-xs font-bold text-white"
-                        style={{ background: st.solid }}
-                      >
-                        {list.length}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-sm font-semibold text-muted">{categoryBlurb(cat)}</p>
-                  </div>
-                </div>
-
-                {/* Chips sit on their own panel so they stay legible over the
-                    tint and the watermark behind the card. */}
-                <div className="mt-4 rounded-2xl bg-surface-2/60 p-2 sm:p-3">
-                  <div className="flex flex-wrap gap-2">
-                    {list.map((r) => (
-                      <span
-                        key={r.id}
-                        className="group inline-flex items-center gap-1.5 rounded-full bg-surface py-1.5 pl-2.5 pr-1.5 text-[13px] font-bold transition-all hover:-translate-y-px sm:gap-2 sm:pl-3 sm:text-sm"
-                        style={{ color: st.ink, boxShadow: `inset 0 0 0 1.5px ${st.solid}33, 0 1px 2px rgb(26 28 31 / 0.05)` }}
-                      >
-                        <Icon name={st.icon} size={13} style={{ color: st.solid }} />
-                        <span className="lowercase">{r.pattern}</span>
-                        {r.subcategoryName && (
-                          <span
-                            className="rounded-full px-2 py-0.5 text-[11px] font-bold"
-                            style={{ background: st.soft, color: st.ink }}
-                          >
-                            {r.subcategoryName}
+        <aside className="card p-4" aria-label="Categories">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <h2 className="h-section">Categories</h2>
+            <Link href="/settings#categories" className="text-xs font-semibold text-[rgb(var(--peri))] hover:underline">
+              Manage →
+            </Link>
+          </div>
+          {/* Two groups instead of a "not spend" chip on every row. */}
+          {([
+            ['Spending', categories.filter((c) => c.isExpense)],
+            ['Not spending · income and transfers', categories.filter((c) => !c.isExpense)],
+          ] as const).map(([label, list]) =>
+            list.length === 0 ? null : (
+              <div key={label} className="mt-4 first:mt-1">
+                <div className="eyebrow px-1 pb-1">{label}</div>
+                <ul className="flex flex-col gap-2">
+                  {list.map((c) => {
+                    // Each tile in its category's own colour, as on tags and charts.
+                    const st = categoryStyle(c.name, c.isExpense);
+                    return (
+                      <li key={c.id} className="rounded-2xl border px-3.5 py-3" style={{ background: st.soft, borderColor: `${st.solid}55` }}>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="flex min-w-0 items-center gap-2 text-sm font-semibold" style={{ color: st.ink }}>
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: st.solid }} />
+                            <span className="truncate">{c.name}</span>
                           </span>
+                          {c.subcategories.length > 0 && (
+                            <span className="tabular shrink-0 rounded-full bg-white/70 px-2 text-xs font-semibold" style={{ color: st.ink }}>
+                              {c.subcategories.length}
+                            </span>
+                          )}
+                        </div>
+                        {c.subcategories.length > 0 && (
+                          <div className="mt-1 text-xs leading-relaxed text-text/70">{c.subcategories.map((sub) => sub.name).join(' · ')}</div>
                         )}
-                        <button
-                          onClick={() => remove(r.id)}
-                          className="grid h-5 w-5 place-items-center rounded-full text-muted transition-colors hover:bg-debit hover:text-white"
-                          aria-label={`Remove ${r.pattern}`}
-                        >
-                          <Icon name="close" size={11} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-            </section>
-          );
-        })}
+            ),
+          )}
+        </aside>
       </div>
     </div>
   );

@@ -85,12 +85,12 @@ export default function LandingPage() {
             <span className="grid h-9 w-9 place-items-center rounded-2xl bg-amber text-[rgb(var(--ink))] text-lg font-bold">₹</span>
             <span className="text-[15px] font-extrabold tracking-tight">Spendwise</span>
           </Link>
-          <nav className="ml-auto hidden sm:flex items-center gap-1 text-sm font-medium text-muted">
+          <nav className="ml-auto hidden md:flex items-center gap-1 whitespace-nowrap text-sm font-medium text-muted">
             <a href="#features" className="px-3 py-2 rounded-full hover:text-text hover:bg-surface-2 transition-colors">Features</a>
             <a href="#how" className="px-3 py-2 rounded-full hover:text-text hover:bg-surface-2 transition-colors">How it works</a>
             <a href="#faq" className="px-3 py-2 rounded-full hover:text-text hover:bg-surface-2 transition-colors">FAQ</a>
           </nav>
-          <div className="ml-auto sm:ml-3 flex items-center gap-2">
+          <div className="ml-auto md:ml-3 flex items-center gap-2">
             {/* The hero's "I have an account" covers sign-in on small screens. */}
             <InstallApp className="btn-ghost hidden sm:inline-flex whitespace-nowrap gap-1.5" label="Get the app" />
             <Link href="/login" className="btn-ghost hidden xs:inline-flex whitespace-nowrap">Sign in</Link>
@@ -100,10 +100,10 @@ export default function LandingPage() {
       </header>
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="relative mx-auto max-w-6xl px-5 pt-10 pb-8 sm:pt-20">
+      <section data-animate className="relative mx-auto max-w-6xl px-5 pt-10 pb-8 sm:pt-20">
         <div className="grid gap-12 lg:grid-cols-[1.05fr_1fr] lg:items-center">
           <div className="min-w-0">
-            <div className="animate-fade-up inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-muted shadow-card">
+            <div className="animate-fade-up inline-flex items-center gap-2 rounded-full bg-surface px-3.5 py-1.5 text-xs font-semibold text-muted">
               <span className="h-1.5 w-1.5 rounded-full bg-credit" />
               Built for Indian bank &amp; UPI alerts
             </div>
@@ -143,7 +143,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Bank marquee ─────────────────────────────────────────────────── */}
-      <section className="border-y border-border/60 bg-surface/50 py-8 sm:py-10">
+      <section data-animate className="border-y border-border/60 bg-surface/50 py-8 sm:py-10">
         <p className="text-center text-xs font-semibold uppercase tracking-[0.14em] text-muted mb-5">Reads alerts from</p>
         <div className="relative overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_12%,#000_88%,transparent)]">
           <div className="flex w-max animate-marquee gap-3">
@@ -162,7 +162,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Automatic email capture ──────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-5 py-14 sm:py-20 lg:py-24">
+      <section data-animate className="mx-auto max-w-6xl px-5 py-14 sm:py-20 lg:py-24">
         <div className="grid gap-10 lg:grid-cols-[1fr_1.05fr] lg:items-center lg:gap-12">
           <Reveal>
             <span className="chip bg-sky text-[rgb(var(--peri-2))]">Fully automatic</span>
@@ -200,7 +200,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Features ─────────────────────────────────────────────────────── */}
-      <section id="features" className="mx-auto max-w-6xl px-5 py-14 sm:py-20 lg:py-24">
+      <section data-animate id="features" className="mx-auto max-w-6xl px-5 py-14 sm:py-20 lg:py-24">
         <Reveal>
           <h2 className="text-[clamp(1.6rem,5vw,2.6rem)] font-extrabold tracking-tight max-w-2xl">
             The boring part is the whole point.
@@ -235,7 +235,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── How it works ─────────────────────────────────────────────────── */}
-      <section id="how" className="bg-[rgb(var(--ink))] text-white">
+      <section data-animate id="how" className="bg-[rgb(var(--ink))] text-white">
         <div className="mx-auto max-w-6xl px-5 py-14 sm:py-20 lg:py-24">
           <Reveal>
             <h2 className="text-[clamp(1.6rem,5vw,2.6rem)] font-extrabold tracking-tight">Set up in three steps.</h2>
@@ -258,7 +258,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Privacy ──────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-5 py-14 sm:py-20 lg:py-24">
+      <section data-animate className="mx-auto max-w-6xl px-5 py-14 sm:py-20 lg:py-24">
         <Reveal>
           <div className="card grid items-center gap-8 p-6 sm:p-10 lg:grid-cols-2 lg:gap-10 lg:p-12">
             <div>
@@ -293,7 +293,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── FAQ ──────────────────────────────────────────────────────────── */}
-      <section id="faq" className="mx-auto max-w-3xl px-5 pb-14 sm:pb-20 lg:pb-24">
+      <section data-animate id="faq" className="mx-auto max-w-3xl px-5 pb-14 sm:pb-20 lg:pb-24">
         <Reveal>
           <h2 className="text-[clamp(1.6rem,5vw,2.6rem)] font-extrabold tracking-tight text-center">Questions, answered.</h2>
         </Reveal>
@@ -313,7 +313,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Closing CTA ──────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-5 pb-20">
+      <section data-animate className="mx-auto max-w-6xl px-5 pb-20">
         <Reveal>
           <div className="card-ink relative overflow-hidden p-6 text-center sm:p-12 lg:p-16">
             <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[rgb(var(--amber))]/12 animate-float-slow" aria-hidden />
@@ -371,7 +371,7 @@ function HeroPreview() {
   }, '');
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-[28px] border border-border bg-surface shadow-card">
+    <div className="min-w-0 overflow-hidden rounded-[28px] bg-surface">
       {/* Window chrome — reads as the real app, not a chart widget. */}
       <div className="flex items-center gap-2 border-b border-border px-4 py-3 sm:px-5">
         <span className="h-2.5 w-2.5 rounded-full bg-[rgb(var(--debit))]/70" />

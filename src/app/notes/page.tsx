@@ -53,17 +53,17 @@ function TxnRow({ t, children }: { t: Txn; children?: React.ReactNode }) {
   const style = categoryStyle(t.categoryName, t.direction === 'debit');
   return (
     <>
-      <span className="tile h-9 w-9 shrink-0 rounded-xl text-white" style={{ background: style.solid }}>
-        <Icon name={style.icon} size={16} />
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-bold" style={{ background: style.soft, color: style.ink }}>
+        {t.label.trim().charAt(0).toUpperCase() || '·'}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="truncate font-bold">{t.label}</div>
-        <div className="truncate text-xs font-medium text-muted">
+        <div className="truncate font-semibold">{t.label}</div>
+        <div className="truncate text-xs text-muted">
           {fmtDate(t.occurredAt)}
           {t.categoryName && ` · ${t.categoryName}${t.subcategoryName ? ` › ${t.subcategoryName}` : ''}`}
         </div>
       </div>
-      <span className={`tabular whitespace-nowrap font-extrabold ${t.direction === 'credit' ? 'text-credit' : 'text-debit'}`}>
+      <span className={`tabular whitespace-nowrap font-semibold ${t.direction === 'credit' ? 'text-credit' : 'text-debit'}`}>
         {t.direction === 'credit' ? '+' : '−'}{inr(Number(t.amount))}
       </span>
       {children}
@@ -72,8 +72,18 @@ function TxnRow({ t, children }: { t: Txn; children?: React.ReactNode }) {
 }
 
 /** Search the user's transactions and tick the ones to attach. */
-function TransactionPicker({ selected, onClose, onDone }: { selected: Txn[]; onClose: () => void; onDone: (txns: Txn[]) => void }) {
-  const [q, setQ] = useState('');
+function TransactionPicker({
+  selected,
+  initialQuery = '',
+  onClose,
+  onDone,
+}: {
+  selected: Txn[];
+  initialQuery?: string;
+  onClose: () => void;
+  onDone: (txns: Txn[]) => void;
+}) {
+  const [q, setQ] = useState(initialQuery);
   const [results, setResults] = useState<Txn[] | null>(null);
   const [picked, setPicked] = useState<Map<number, Txn>>(() => new Map(selected.map((t) => [t.id, t])));
 
@@ -164,6 +174,7 @@ export default function NotesPage() {
   const [q, setQ] = useState('');
   const [draft, setDraft] = useState<Draft | null>(null);
   const [picking, setPicking] = useState(false);
+  const [attachQuery, setAttachQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -176,7 +187,13 @@ export default function NotesPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    // On desktop, open the most recent note so the editor isn't a blank pane.
+    load().then((list) => {
+      const first = list?.[0];
+      if (first && window.matchMedia('(min-width: 1024px)').matches) {
+        setDraft((d) => d ?? { id: first.id, title: first.title, body: first.body, transactions: first.transactions });
+      }
+    });
   }, [load]);
 
   const filtered = useMemo(() => {
@@ -232,6 +249,7 @@ export default function NotesPage() {
       {picking && draft && (
         <TransactionPicker
           selected={draft.transactions}
+          initialQuery={attachQuery}
           onClose={() => setPicking(false)}
           onDone={(txns) => {
             setDraft({ ...draft, transactions: txns });
@@ -240,29 +258,27 @@ export default function NotesPage() {
         />
       )}
 
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="h-page">Notes</h1>
-          <p className="text-sm text-muted">Keep notes about payments and attach the transactions they’re about — just for the record.</p>
+          <div className="eyebrow">Keep the story behind the money</div>
+          <h1 className="h-page mt-1.5">Notes</h1>
         </div>
-        <button onClick={() => open({ ...EMPTY })} className="btn-primary self-start whitespace-nowrap sm:self-auto">
+        <button onClick={() => open({ ...EMPTY })} className="btn-accent self-start whitespace-nowrap px-4 sm:self-auto">
           <Icon name="plus" size={16} /> New note
         </button>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
         {/* List — hidden on small screens while a note is open */}
-        <section className={`card overflow-hidden ${draft ? 'hidden lg:block' : ''}`}>
-          <div className="border-b border-border p-3">
-            <label className="relative block">
-              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"><Icon name="search" size={15} /></span>
-              <input className="input pl-9" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search notes" />
-            </label>
-          </div>
+        <aside aria-label="All notes" className={`flex flex-col gap-2.5 ${draft ? 'hidden lg:flex' : ''}`}>
+          <label className="relative block">
+            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"><Icon name="search" size={15} /></span>
+            <input className="input pl-9" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search notes" />
+          </label>
           {notes === null ? (
-            <p className="py-10 text-center text-sm text-muted">Loading…</p>
+            <p className="card py-10 text-center text-sm text-muted">Loading…</p>
           ) : filtered.length === 0 ? (
-            <div className="px-5 py-10 text-center text-sm text-muted">
+            <div className="card px-5 py-10 text-center text-sm text-muted">
               {notes.length === 0 ? (
                 <>
                   <span className="tile mx-auto mb-3 h-12 w-12 bg-surface-2 text-muted"><Icon name="note" size={20} /></span>
@@ -273,91 +289,96 @@ export default function NotesPage() {
               )}
             </div>
           ) : (
-            <ul className="divide-y divide-border">
-              {filtered.map((n) => {
-                const s = totals(n.transactions);
-                const active = draft?.id === n.id;
-                return (
-                  <li key={n.id}>
-                    <button
-                      onClick={() => open({ id: n.id, title: n.title, body: n.body, transactions: n.transactions })}
-                      aria-current={active ? 'true' : undefined}
-                      className={`block w-full px-4 py-3 text-left transition-colors ${active ? 'bg-surface-2' : 'hover:bg-surface-2/60'}`}
-                    >
-                      <div className="truncate text-sm font-bold">{n.title}</div>
-                      {n.body && <div className="mt-0.5 line-clamp-2 text-xs text-muted">{n.body}</div>}
-                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px] font-semibold text-muted">
-                        <span>{fmtDate(n.updatedAt)}</span>
-                        {n.transactions.length > 0 && (
-                          <>
-                            <span>· {n.transactions.length} transaction{n.transactions.length === 1 ? '' : 's'}</span>
-                            {s.spent > 0 && <span className="text-debit">−{inr(s.spent)}</span>}
-                            {s.received > 0 && <span className="text-credit">+{inr(s.received)}</span>}
-                          </>
-                        )}
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            filtered.map((n) => {
+              const s = totals(n.transactions);
+              const active = draft?.id === n.id;
+              return (
+                <button
+                  key={n.id}
+                  data-animate
+                  onClick={() => open({ id: n.id, title: n.title, body: n.body, transactions: n.transactions })}
+                  aria-current={active ? 'true' : undefined}
+                  className={`flex w-full flex-col gap-1.5 rounded-2xl p-4 text-left transition-colors ${
+                    active ? 'border border-[rgb(var(--ink))] bg-[rgb(var(--ink))] text-white' : 'border border-border bg-surface hover:border-[rgb(var(--text))]/40'
+                  }`}
+                >
+                  <span className="truncate font-bold">{n.title}</span>
+                  {n.body && <span className={`line-clamp-2 text-[13px] ${active ? 'text-[rgb(var(--sidebar-muted))]' : 'text-muted'}`}>{n.body}</span>}
+                  <span className="mt-1 flex flex-wrap gap-1.5">
+                    <span className={`chip ${active ? 'bg-white/10 text-amber' : 'bg-surface-2 text-text'}`}>
+                      {n.transactions.length} payment{n.transactions.length === 1 ? '' : 's'}
+                    </span>
+                    {s.spent > 0 && <span className={`chip tabular ${active ? 'bg-white/10 text-white' : 'bg-surface-2 text-text'}`}>{inr(s.spent)}</span>}
+                    {!n.transactions.length && <span className={`chip ${active ? 'bg-white/10 text-white' : 'bg-surface-2 text-muted'}`}>{fmtDate(n.updatedAt)}</span>}
+                  </span>
+                </button>
+              );
+            })
           )}
-        </section>
+        </aside>
 
         {/* Editor */}
         {draft ? (
-          <section className="card space-y-4 p-4 sm:p-5">
+          <section className="card flex flex-col gap-4 p-5 sm:p-7">
             <div className="flex items-center gap-2">
               <button onClick={() => open(null)} className="icon-btn lg:hidden" aria-label="Back to notes"><Icon name="close" size={16} /></button>
-              <span className="flex-1 text-xs font-semibold text-muted">
-                {draft.id == null ? 'New note' : dirty ? 'Unsaved changes' : saved ? `Saved ${fmtDate(saved.updatedAt)}` : ''}
+              <span className="flex-1 text-xs text-muted">
+                {draft.id == null ? 'New note' : dirty ? 'Unsaved changes' : saved ? `Edited ${fmtDate(saved.updatedAt)} · saved` : ''}
               </span>
-              <button onClick={remove} disabled={busy} className="icon-btn-danger" aria-label="Delete note" title={draft.id == null ? 'Discard' : 'Delete note'}>
-                <Icon name="trash" size={15} />
+              {dirty && saved && (
+                <button onClick={() => setDraft({ id: saved.id, title: saved.title, body: saved.body, transactions: saved.transactions })} className="btn-ghost min-h-10 px-3 text-xs">
+                  Undo
+                </button>
+              )}
+              <button onClick={save} disabled={busy || !dirty} className="btn-primary min-h-10 px-4">{busy ? 'Saving…' : 'Save'}</button>
+              <button onClick={remove} disabled={busy} className="btn-outline min-h-10 px-4 text-debit" aria-label="Delete note">
+                {draft.id == null ? 'Discard' : 'Delete'}
               </button>
             </div>
 
-            <input
-              className="w-full bg-transparent text-xl font-extrabold tracking-tight outline-none placeholder:text-muted/60"
-              placeholder="Title, e.g. Goa trip expenses"
-              value={draft.title}
-              onChange={(e) => { setDraft({ ...draft, title: e.target.value }); setSaveError(null); }}
-              maxLength={120}
-              aria-label="Note title"
-              autoFocus={draft.id == null}
-            />
-            <textarea
-              className="input min-h-[160px] resize-y leading-relaxed"
-              placeholder="Write anything — who paid, what’s still owed, why this charge happened…"
-              value={draft.body}
-              onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-              aria-label="Note text"
-            />
+            {/* Labelled fields with a soft ground, so title and body read as two boxes. */}
+            <label className="flex flex-col gap-1.5">
+              <span className="eyebrow">Title</span>
+              <input
+                className="w-full rounded-2xl bg-surface-2 px-4 py-3 font-display text-[clamp(1.375rem,3vw,1.875rem)] font-extrabold tracking-[-0.02em] outline-none transition-shadow placeholder:font-bold placeholder:text-muted/60 focus:ring-2 focus:ring-[rgb(var(--ink))]/15"
+                placeholder="e.g. Goa trip expenses"
+                value={draft.title}
+                onChange={(e) => { setDraft({ ...draft, title: e.target.value }); setSaveError(null); }}
+                maxLength={120}
+                autoFocus={draft.id == null}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="eyebrow">Note</span>
+              <textarea
+                className="min-h-[140px] w-full resize-y rounded-2xl bg-surface-2 px-4 py-3 text-[15px] leading-relaxed outline-none transition-shadow placeholder:text-muted/70 focus:ring-2 focus:ring-[rgb(var(--ink))]/15"
+                placeholder="Who paid, what’s still owed, why this charge happened…"
+                value={draft.body}
+                onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+              />
+            </label>
+            {saveError && <p className="text-sm font-semibold text-debit">{saveError}</p>}
 
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="flex-1 text-[15px] font-bold">Transactions</h2>
+            <div className="flex flex-col border-t border-border pt-4">
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="h-section">Attached payments</h2>
                 {t && draft.transactions.length > 0 && (
-                  <span className="text-xs font-semibold text-muted">
-                    {t.spent > 0 && <span className="text-debit">Spent {inr(t.spent)}</span>}
-                    {t.spent > 0 && t.received > 0 && ' · '}
-                    {t.received > 0 && <span className="text-credit">Received {inr(t.received)}</span>}
+                  <span className="tabular text-sm font-semibold">
+                    {inr(t.spent)}
+                    {t.received > 0 && <span className="text-muted"> · net {inr(t.spent - t.received)}</span>}
                   </span>
                 )}
-                <button onClick={() => setPicking(true)} className="btn-outline px-3 py-1.5 text-xs">
-                  <Icon name="plus" size={13} /> Attach
-                </button>
               </div>
               {draft.transactions.length === 0 ? (
-                <p className="rounded-2xl bg-surface-2 px-4 py-3 text-sm text-muted">No transactions attached. Use Attach to pick the payments this note is about.</p>
+                <p className="py-3 text-sm text-muted">Nothing attached yet. Search below for the payments this note is about.</p>
               ) : (
-                <ul className="divide-y divide-border rounded-2xl border border-border px-3">
+                <ul className="divide-y divide-border">
                   {draft.transactions.map((tx) => (
                     <li key={tx.id} className="flex items-center gap-3 py-2.5 text-sm">
                       <TxnRow t={tx}>
                         <button
                           onClick={() => setDraft({ ...draft, transactions: draft.transactions.filter((x) => x.id !== tx.id) })}
-                          className="icon-btn h-8 w-8 shrink-0"
+                          className="icon-btn h-9 w-9 shrink-0"
                           aria-label={`Detach ${tx.label}`}
                           title="Detach"
                         >
@@ -368,16 +389,22 @@ export default function NotesPage() {
                   ))}
                 </ul>
               )}
-            </div>
-
-            {saveError && <p className="text-sm font-semibold text-debit">{saveError}</p>}
-            <div className="flex justify-end gap-2 border-t border-border pt-4">
-              {dirty && saved && (
-                <button onClick={() => setDraft({ id: saved.id, title: saved.title, body: saved.body, transactions: saved.transactions })} className="btn-outline">
-                  Undo changes
-                </button>
-              )}
-              <button onClick={save} disabled={busy || !dirty} className="btn-primary">{busy ? 'Saving…' : 'Save note'}</button>
+              <form
+                className="mt-3 flex gap-2 rounded-2xl bg-surface-2 p-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setPicking(true);
+                }}
+              >
+                <input
+                  className="input flex-1"
+                  placeholder="Search by merchant to attach"
+                  aria-label="Search transactions by merchant"
+                  value={attachQuery}
+                  onChange={(e) => setAttachQuery(e.target.value)}
+                />
+                <button type="submit" className="btn-primary px-5">Attach</button>
+              </form>
             </div>
           </section>
         ) : (

@@ -17,7 +17,8 @@ export default function AuthShell({
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[1.05fr_1fr]">
       {/* ── Pitch panel ─────────────────────────────────────────────────── */}
-      <aside className="relative hidden overflow-hidden bg-[rgb(var(--ink))] p-12 text-white lg:flex lg:flex-col">
+      {/* Form first, story panel on the right — as in the redesign. */}
+      <aside className="relative hidden overflow-hidden bg-[rgb(var(--ink))] p-12 text-white lg:order-last lg:flex lg:flex-col">
         <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[rgb(var(--amber))]/10" aria-hidden />
         <div className="absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-white/[0.03]" aria-hidden />
 

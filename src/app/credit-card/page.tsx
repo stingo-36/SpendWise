@@ -8,6 +8,18 @@ import { useCategories } from '@/lib/useCategories';
 import Reveal from '@/components/Reveal';
 import { categoryStyle } from '@/lib/palette';
 import { DEFAULT_STATEMENT_DAY, MAX_STATEMENT_DAY, recentCycles } from '@/lib/billingCycle';
+import AddTransaction from '@/components/AddTransaction';
+
+interface LastBill {
+  label: string;
+  to: string;
+  amount: number;
+  paid: number;
+  due: number;
+  lastPaidAt: string | null;
+}
+
+const DAY = 86_400_000;
 
 interface Card {
   id: number;
@@ -39,6 +51,8 @@ export default function CreditCardPage() {
   const [cycleIdx, setCycleIdx] = useState(0);
   const cycle = cycles[cycleIdx] ?? cycles[0];
   const [cards, setCards] = useState<Card[]>([]);
+  const [lastBill, setLastBill] = useState<LastBill | null>(null);
+  const [paying, setPaying] = useState(false);
   const [txns, setTxns] = useState<Txn[]>([]);
   const [loading, setLoading] = useState(true);
   const [last4, setLast4] = useState('');
@@ -51,6 +65,7 @@ export default function CreditCardPage() {
   const loadCards = useCallback(async () => {
     const c = await fetch('/api/credit-cards', { cache: 'no-store' }).then((r) => r.json());
     setCards(c.cards ?? []);
+    setLastBill(c.lastBill ?? null);
     if (c.statementDay) setStatementDay(c.statementDay);
   }, []);
 
@@ -160,48 +175,114 @@ export default function CreditCardPage() {
 
   return (
     <div className="space-y-5 pt-1">
-      <header className="relative z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <header className="relative z-30 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="h-page">Credit card</h1>
-          <p className="text-sm text-muted">Card charges count as spend but don’t leave your account until you pay the bill.</p>
+          <div className="eyebrow">
+            Bill generates on the {ordinal(statementDay)} · cycle {ordinal(statementDay + 1)} → {ordinal(statementDay)}
+          </div>
+          <h1 className="h-page mt-1.5">Cards</h1>
         </div>
-        <Select
-          value={String(cycleIdx)}
-          options={cycles.map((c, i) => ({
-            value: String(i),
-            label: c.label,
-            hint: i === 0 ? 'Current cycle' : `Billed ${c.statementDate.getFullYear()}`,
-            icon: 'calendar',
-          }))}
-          onChange={(v) => setCycleIdx(Number(v))}
-          align="right"
-          className="!w-auto min-w-[12rem] rounded-full"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={String(cycleIdx)}
+            options={cycles.map((c, i) => ({
+              value: String(i),
+              label: c.label,
+              hint: i === 0 ? 'Current cycle' : `Billed ${c.statementDate.getFullYear()}`,
+              icon: 'calendar',
+            }))}
+            onChange={(v) => setCycleIdx(Number(v))}
+            align="right"
+            className="!w-auto min-w-[12rem]"
+          />
+          <button onClick={() => setPaying(true)} className="btn-accent px-4">
+            Record bill payment
+          </button>
+        </div>
       </header>
 
-      {/* Headline: what went on the card this cycle */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="card-hero animate-pop p-4 sm:p-5 sm:col-span-2">
-          <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/[0.07]" aria-hidden />
-          <div className="relative flex items-center justify-between">
-            <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide text-white/70">Charged this cycle</div>
-            <span className="tile h-9 w-9 bg-white/15 text-white"><Icon name="wallet" size={16} /></span>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        {/* Headline: what went on the card this cycle */}
+        <section className="card-hero flex flex-col gap-4 p-5 sm:p-6 xl:col-span-2 animate-pop">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="eyebrow !text-[rgb(var(--sidebar-muted))]">{cycleIdx === 0 ? 'Charged this cycle' : `Charged ${cycle.label}`}</span>
+            {cycleIdx === 0 && (
+              <span className="chip bg-white/[0.08] text-amber">
+                {Math.max(0, Math.ceil((cycle.end.getTime() - DAY - Date.now()) / DAY))} days to bill
+              </span>
+            )}
           </div>
-          <div className="relative mt-2 text-[28px] leading-tight font-extrabold tabular">{inr(charges)}</div>
-          <div className="relative mt-1 text-xs font-medium text-white/70">
-            {cycle.label} · {cycleIdx === 0 ? 'bill on' : 'billed'} {cycle.statementDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-            {' · '}
-            {refunds > 0 ? `${inr(refunds)} refunded · net ${inr(charges - refunds)}` : `${txns.length} transaction${txns.length === 1 ? '' : 's'}`}
+          <div className="font-display text-[clamp(2.75rem,8vw,4.75rem)] font-extrabold leading-none tracking-[-0.03em] tabular text-amber">
+            {inr(charges - refunds)}
           </div>
-        </div>
-        <div className="card-tinted animate-pop p-4 sm:p-5" style={{ ['--tone-soft' as string]: '#EEEAF8', ['--tone-border' as string]: '#8095F240', animationDelay: '70ms' }}>
-          <div className="flex items-center justify-between">
-            <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide text-muted">Cards</div>
-            <span className="tile h-9 w-9 bg-lilac text-[rgb(var(--peri-2))]"><Icon name="receipt" size={16} /></span>
+          {cycleIdx === 0 && (
+            <div>
+              <div className="h-3 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-amber"
+                  style={{ width: `${Math.min(100, Math.max(0, ((Date.now() - cycle.start.getTime()) / (cycle.end.getTime() - cycle.start.getTime())) * 100))}%` }}
+                />
+              </div>
+              <div className="mt-2 flex justify-between text-xs text-[rgb(var(--sidebar-muted))] tabular">
+                <span>{cycle.start.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                <span className="text-white">today</span>
+                <span>{cycle.statementDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · bill</span>
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="rounded-2xl bg-white/[0.06] p-3">
+              <div className="text-xs text-[rgb(var(--sidebar-muted))]">Charges</div>
+              <div className="tabular font-semibold">{inr(charges)}</div>
+            </div>
+            <div className="rounded-2xl bg-white/[0.06] p-3">
+              <div className="text-xs text-[rgb(var(--sidebar-muted))]">Refunds</div>
+              <div className="tabular font-semibold text-[#9FB8F0]">−{inr(refunds)}</div>
+            </div>
+            <div className="rounded-2xl bg-white/[0.06] p-3">
+              <div className="text-xs text-[rgb(var(--sidebar-muted))]">Transactions</div>
+              <div className="tabular font-semibold">{txns.length}</div>
+            </div>
           </div>
-          <div className="mt-2 text-[28px] leading-tight font-extrabold tabular">{cards.length}</div>
-          <div className="mt-1 text-xs font-medium text-muted">registered</div>
-        </div>
+        </section>
+
+        {/* The statement that's already out, and what's left to pay on it. */}
+        <section className="card flex flex-col gap-3 p-5 animate-pop" style={{ animationDelay: '70ms' }}>
+          <h2 className="h-section">Last bill</h2>
+          {!lastBill ? (
+            <p className="text-sm text-muted">Loading…</p>
+          ) : (
+            <>
+              <div className="tabular text-xs text-muted">{lastBill.label} · generated {fmtDate(lastBill.to)}</div>
+              <div className="font-display text-4xl font-extrabold leading-none tabular">{inr(lastBill.amount)}</div>
+              <div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-surface-2">
+                  <div className="h-full rounded-full bg-credit" style={{ width: `${lastBill.amount > 0 ? Math.min(100, (lastBill.paid / lastBill.amount) * 100) : 100}%` }} />
+                </div>
+                <div className="mt-1.5 flex justify-between text-xs font-semibold">
+                  <span className="text-credit">{inr(lastBill.paid)} paid</span>
+                  <span className={lastBill.due > 0 ? 'text-debit' : 'text-credit'}>{lastBill.due > 0 ? `${inr(lastBill.due)} due` : 'Cleared'}</span>
+                </div>
+              </div>
+              {lastBill.lastPaidAt && (
+                <div className="flex items-center gap-3 border-t border-border pt-3 text-sm">
+                  <span className="tile h-9 w-9 shrink-0 bg-sky text-[rgb(var(--peri-2))]">
+                    <Icon name="check" size={16} />
+                  </span>
+                  <span>
+                    <span className="block font-semibold">Last payment</span>
+                    <span className="text-xs text-muted">{fmtDate(lastBill.lastPaidAt)}</span>
+                  </span>
+                </div>
+              )}
+              {lastBill.due > 0 && (
+                <button onClick={() => setPaying(true)} className="btn-primary mt-auto">
+                  Pay the rest · {inr(lastBill.due)}
+                </button>
+              )}
+            </>
+          )}
+        </section>
       </div>
 
       {/* Registry */}
@@ -220,7 +301,7 @@ export default function CreditCardPage() {
           ) : (
             <ul className="space-y-2">
               {cards.map((c) => (
-                <li key={c.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:shadow-card">
+                <li key={c.id} className="flex items-center gap-3 rounded-2xl bg-surface-2 px-4 py-3">
                   <span className="tile h-10 w-10 bg-[rgb(var(--amber))] text-[rgb(var(--ink))]"><Icon name="creditcard" size={18} /></span>
                   <div className="flex-1 min-w-0">
                     <div className="truncate text-sm font-bold">{c.label}</div>
@@ -243,7 +324,7 @@ export default function CreditCardPage() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4 text-sm">
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#DCE8B4] bg-sand px-4 py-3 text-sm">
             <span className="font-semibold">Bill generates on the</span>
             <Select
               value={String(statementDay)}
@@ -255,7 +336,7 @@ export default function CreditCardPage() {
             <span className="text-muted">of every month — each cycle runs from the day after through that day.</span>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 border-t border-border pt-4">
+          <div className="flex flex-col gap-2 rounded-2xl border border-[#DCE8B4] bg-sand p-3 sm:flex-row">
             <input
               value={last4}
               onChange={(e) => setLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
@@ -337,6 +418,14 @@ export default function CreditCardPage() {
           )}
         </section>
       </Reveal>
+      {paying && (
+        <AddTransaction
+          initialKind="cardBill"
+          initialAmount={lastBill?.due || undefined}
+          onAdded={reload}
+          onClose={() => setPaying(false)}
+        />
+      )}
     </div>
   );
 }

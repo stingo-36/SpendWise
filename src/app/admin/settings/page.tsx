@@ -7,8 +7,8 @@ export default function AdminSettingsPage() {
   return (
     <div className="space-y-5 pt-1">
       <header>
-        <h1 className="h-page">App settings</h1>
-        <p className="text-sm text-muted">Shared by every SpendWise account. Users connect their own Gmail with these.</p>
+        <div className="eyebrow">Shared by all accounts</div>
+        <h1 className="h-page mt-1.5">App settings</h1>
       </header>
       <CredentialsForm />
     </div>

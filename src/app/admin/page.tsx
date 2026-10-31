@@ -412,8 +412,8 @@ export default function AdminPage() {
       )}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="h-page">Users</h1>
-          <p className="text-sm text-muted">Every SpendWise account and how it’s being used.</p>
+          <div className="eyebrow">All accounts</div>
+          <h1 className="h-page mt-1.5">Users</h1>
         </div>
         <div className="flex flex-col gap-2 xs:flex-row">
           <label className="relative flex-1 sm:w-64 sm:flex-none">

@@ -24,7 +24,7 @@ export default function SyncStatus() {
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-start gap-3 rounded-2xl bg-[rgb(var(--ink))] px-4 py-3 text-sm text-white shadow-ink animate-fade-up sm:left-auto sm:right-6 sm:mx-0"
+      className="fixed inset-x-4 bottom-[calc(6rem+env(safe-area-inset-bottom))] lg:bottom-6 z-50 mx-auto flex max-w-md items-start gap-3 rounded-2xl border border-white/10 bg-[rgb(var(--ink))] px-4 py-3 text-sm text-white shadow-ink animate-fade-up sm:left-auto sm:right-6 sm:mx-0"
     >
       <span className={`tile mt-0.5 h-6 w-6 shrink-0 ${s.running ? 'bg-white/15' : ok ? 'bg-[rgb(var(--credit))]' : 'bg-[rgb(var(--debit))]'}`}>
         <Icon name={s.running ? 'repeat' : ok ? 'check' : 'alert'} size={13} className={s.running ? 'animate-spin' : undefined} />
