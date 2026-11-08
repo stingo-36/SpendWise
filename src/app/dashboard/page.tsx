@@ -10,6 +10,8 @@ import CategoryWeekChart, { type WeeklyCategorySpend } from '@/components/Catego
 import RecentTransactions from '@/components/RecentTransactions';
 import BudgetWidget from '@/components/BudgetWidget';
 import AddTransaction from '@/components/AddTransaction';
+import OpeningBalance from '@/components/OpeningBalance';
+import type { MonthBalance } from '@/lib/balance';
 import { categoryColor } from '@/lib/palette';
 import { DATA_CHANGED_EVENT } from '@/lib/navLinks';
 
@@ -31,6 +33,8 @@ interface Overview {
   txnCount: number;
   uncategorizedCount: number;
   weekly: WeeklyCategorySpend;
+  /** Opening balance (carried or set) and what's left after this month. */
+  balance?: MonthBalance;
 }
 
 interface Sub {
@@ -117,8 +121,11 @@ export default function HomePage() {
   // Card charges are spend but haven't left the account yet, so what's left in
   // the account nets money in against account outflow only — never against
   // totalSpend, which includes charges still sitting on the card.
-  const leftInAccount = data ? data.totalMoneyIn - data.accountOutflow : 0;
-  const savedPct = data && data.totalMoneyIn > 0 ? Math.round((leftInAccount / data.totalMoneyIn) * 100) : null;
+  // It opens with last month's leftover (or an amount you set), so the
+  // headline is the real balance, not just this month's in minus out.
+  const leftInAccount = data ? data.balance?.closing ?? data.totalMoneyIn - data.accountOutflow : 0;
+  // Saved is about this month alone: what came in minus what went out.
+  const savedPct = data && data.totalMoneyIn > 0 ? Math.round(((data.totalMoneyIn - data.accountOutflow) / data.totalMoneyIn) * 100) : null;
 
   // How far through the card cycle we are, for the progress bar.
   const cycle = useMemo(() => {
@@ -188,6 +195,7 @@ export default function HomePage() {
               >
                 {inr(leftInAccount)}
               </div>
+              {data.balance && <OpeningBalance key={`${data.balance.month}:${data.balance.opening}`} balance={data.balance} onSaved={() => refresh(month)} />}
               <div className="grid grid-cols-1 gap-2.5 xs:grid-cols-3">
                 <div className="rounded-2xl bg-white/[0.06] p-3.5">
                   <div className="text-xs text-[rgb(var(--sidebar-muted))]">Money in</div>
