@@ -6,11 +6,13 @@ export interface SubcategoryOpt {
   id: number;
   name: string;
   isExpense: boolean;
+  icon?: string | null;
 }
 export interface CategoryOpt {
   id: number;
   name: string;
   isExpense: boolean;
+  icon?: string | null;
   subcategories: SubcategoryOpt[];
 }
 

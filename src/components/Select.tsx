@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Icon from './Icon';
 import { categoryStyle } from '@/lib/palette';
+import { categoryIcon } from '@/lib/categoryIcons';
 import { categoriesForSide, type CategoryOpt } from '@/lib/useCategories';
 
 /**
@@ -254,7 +255,7 @@ export function CategoryDropdown({
             setExpanded(value.categoryId);
             toggle();
           }}
-          icon={st?.icon ?? 'keywords'}
+          icon={cat ? categoryIcon({ categoryName: cat.name, categoryIcon: cat.icon, subcategoryName: sub?.name, subcategoryIcon: sub?.icon, isExpense: cat.isExpense }) : 'keywords'}
           tone={st?.solid}
           label={cat ? `${cat.name}${sub ? ` › ${sub.name}` : ''}` : undefined}
           placeholder={placeholder}
@@ -296,7 +297,7 @@ export function CategoryDropdown({
                   style={on ? { background: s.soft } : undefined}
                 >
                   <span className="tile h-6 w-6 shrink-0 rounded-lg text-white" style={{ background: s.solid }}>
-                    <Icon name={s.icon} size={12} />
+                    <Icon name={c.icon || s.icon} size={12} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold" style={on ? { color: s.ink } : undefined}>{c.name}</span>
@@ -338,6 +339,12 @@ export function CategoryDropdown({
                           className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] font-bold transition-colors hover:bg-surface-2"
                           style={scOn ? { background: s.soft, color: s.ink } : undefined}
                         >
+                          <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-white" style={{ background: s.solid }}>
+                            <Icon
+                              name={categoryIcon({ categoryName: c.name, categoryIcon: c.icon, subcategoryName: sc.name, subcategoryIcon: sc.icon, isExpense: c.isExpense })}
+                              size={11}
+                            />
+                          </span>
                           {sc.name}
                           {scOn && <Icon name="check" size={13} className="ml-auto" style={{ color: s.solid }} />}
                         </button>

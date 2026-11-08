@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/session-server';
+import { ALL_ICON_CHOICES } from '@/lib/categoryIcons';
 
 export const runtime = 'nodejs';
 
@@ -13,14 +14,18 @@ export async function GET() {
       id: top.id,
       name: top.name,
       isExpense: top.isExpense,
-      subcategories: cats.filter((s) => s.parentId === top.id).map((s) => ({ id: s.id, name: s.name, isExpense: s.isExpense })),
+      icon: top.icon,
+      subcategories: cats
+        .filter((s) => s.parentId === top.id)
+        .map((s) => ({ id: s.id, name: s.name, isExpense: s.isExpense, icon: s.icon })),
     }));
   return NextResponse.json({ categories: tops });
 }
 
 /**
  * Create a category or subcategory.
- * Body: { name, parentId?, isExpense? } — parentId null = top-level.
+ * Body: { name, parentId?, isExpense?, icon? } — parentId null = top-level;
+ * icon null/absent = guessed from the name.
  * (Categories are a shared taxonomy across users.)
  */
 export async function POST(req: NextRequest) {
@@ -40,12 +45,15 @@ export async function POST(req: NextRequest) {
     isExpense = parent.isExpense; // subcategory inherits parent
   }
 
+  const icon = body.icon == null || body.icon === '' ? null : String(body.icon);
+  if (icon != null && !ALL_ICON_CHOICES.has(icon)) return NextResponse.json({ error: 'unknown icon' }, { status: 400 });
+
   const dup = await prisma.category.findFirst({ where: { name, parentId } });
   if (dup) return NextResponse.json({ error: 'That category already exists' }, { status: 409 });
 
   const maxSort = await prisma.category.aggregate({ where: { parentId }, _max: { sortOrder: true } });
   const cat = await prisma.category.create({
-    data: { name, parentId, isExpense, sortOrder: (maxSort._max.sortOrder ?? 0) + 1 },
+    data: { name, parentId, isExpense, icon, sortOrder: (maxSort._max.sortOrder ?? 0) + 1 },
   });
   return NextResponse.json({ ok: true, id: cat.id });
 }

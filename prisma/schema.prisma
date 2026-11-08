@@ -162,6 +162,9 @@ model Category {
   parentId  Int?    @map("parent_id")
   isExpense Boolean @map("is_expense")
   sortOrder Int     @default(0) @map("sort_order")
+  /// An icon you picked (a name from components/Icon). NULL = guessed from
+  /// the name — see lib/categoryIcons.ts.
+  icon      String?
 
   parent        Category?     @relation("CategoryTree", fields: [parentId], references: [id])
   children      Category[]    @relation("CategoryTree")

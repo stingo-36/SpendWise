@@ -7,10 +7,10 @@ import CategoryEditor from '@/components/CategoryEditor';
 import AddTransaction from '@/components/AddTransaction';
 import Icon from '@/components/Icon';
 import Select, { CategoryDropdown } from '@/components/Select';
-import { categoryStyle } from '@/lib/palette';
 import CategoryTag from '@/components/CategoryTag';
 import SplitEditor, { type Share } from '@/components/SplitEditor';
 import { spendAmount } from '@/lib/splits';
+import CategoryTile from '@/components/CategoryTile';
 import { DATA_CHANGED_EVENT } from '@/lib/navLinks';
 
 interface Txn {
@@ -25,8 +25,10 @@ interface Txn {
   accountLast4: string | null;
   categoryId: number | null;
   categoryName: string | null;
+  categoryIcon: string | null;
   subcategoryId: number | null;
   subcategoryName: string | null;
+  subcategoryIcon: string | null;
   categorySource: string;
   categoryLocked: boolean;
   llmConfidence: number | null;
@@ -410,23 +412,23 @@ export default function TransactionsPage() {
 
                 <ul className="flex flex-col">
                   {g.list.map((t) => {
-                    const st = categoryStyle(t.categoryName, t.direction === 'debit');
                     const isEditing = editing === t.id;
                     return (
                       <li key={t.id} data-animate className={`group -mx-3 rounded-2xl transition-colors ${isEditing ? 'bg-surface-2' : 'hover:bg-surface-2/70'}`}>
                         <div className="flex items-center gap-3.5 px-3 py-3">
-                          <span
-                            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-white"
-                            style={{ background: t.categoryId ? st.solid : 'rgb(var(--ink))' }}
-                          >
-                            <Icon name={t.categoryId ? st.icon : 'other'} size={19} />
-                          </span>
+                          <CategoryTile
+                            categoryName={t.categoryName}
+                            categoryIcon={t.categoryIcon}
+                            subcategoryName={t.subcategoryName}
+                            subcategoryIcon={t.subcategoryIcon}
+                            isExpense={t.direction === 'debit'}
+                          />
 
                           {/* Name, then tags and meta underneath — a list item, not table columns. */}
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-[15px] font-semibold">{t.label}</div>
                             <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-                              <CategoryTag category={t.categoryName} subcategory={t.subcategoryName} isExpense={t.direction === 'debit'} locked={t.categoryLocked} />
+                              <CategoryTag category={t.categoryName} subcategory={t.subcategoryName} categoryIcon={t.categoryIcon} subcategoryIcon={t.subcategoryIcon} isExpense={t.direction === 'debit'} locked={t.categoryLocked} />
                               {t.isCreditCard && (
                                 <span className="inline-flex items-center gap-1 rounded-lg bg-[rgb(var(--ink))] px-2 py-0.5 font-semibold text-amber">
                                   <Icon name="creditcard" size={12} /> Card
