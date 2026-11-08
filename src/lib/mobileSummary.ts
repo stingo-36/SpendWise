@@ -3,6 +3,7 @@
  * screen). Built from the same reporting functions as the web overview, so the
  * phone and the dashboard always agree on the month's totals.
  */
+import { spendAmount } from './splits';
 import { prisma } from './db';
 import { getBudgetProgress, getMonthlyOverview, getWeeklyCategorySpend } from './reporting';
 
@@ -50,7 +51,7 @@ export async function getMobileSummary(userId: number, month: string): Promise<M
       orderBy: { occurredAt: 'desc' },
       take: 30,
       select: {
-        id: true, amount: true, occurredAt: true, merchant: true, displayLabel: true, instrument: true,
+        id: true, amount: true, myShare: true, occurredAt: true, merchant: true, displayLabel: true, instrument: true,
         isCreditCard: true, categoryId: true, subcategoryId: true, category: { select: { name: true } },
       },
     }),
@@ -64,9 +65,9 @@ export async function getMobileSummary(userId: number, month: string): Promise<M
   // Today's spend, counted the same way as the month total (is_expense debits).
   const todayTxns = await prisma.transaction.findMany({
     where: { userId, direction: 'debit', occurredAt: { gte: today.start, lt: today.end } },
-    select: { amount: true, categoryId: true, subcategoryId: true },
+    select: { amount: true, myShare: true, categoryId: true, subcategoryId: true },
   });
-  const todaySpend = todayTxns.filter(isExpense).reduce((s, t) => s + Number(t.amount), 0);
+  const todaySpend = todayTxns.filter(isExpense).reduce((s, t) => s + spendAmount(t), 0);
 
   const budgetByName = new Map(budgets.map((b) => [b.categoryName, b.budget]));
   const budgetTotal = budgets.reduce((s, b) => s + b.budget, 0);
@@ -89,7 +90,7 @@ export async function getMobileSummary(userId: number, month: string): Promise<M
     recent: recentTxns.filter(isExpense).slice(0, 10).map((t) => ({
       id: t.id,
       merchant: t.displayLabel || t.merchant,
-      amount: round(Number(t.amount)),
+      amount: round(spendAmount(t)),
       occurredAt: t.occurredAt.toISOString(),
       category: t.category?.name ?? null,
       instrument: t.instrument,

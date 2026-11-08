@@ -7,6 +7,7 @@
  * (this is how the Fees & charges override works), else the category's flag.
  * Only debits count as spend.
  */
+import { spendAmount, isSettlement } from './splits';
 import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 import { cardBillSubcategoryId } from './cardBill';
@@ -186,7 +187,7 @@ export async function getBudgetProgress(userId: number, month: string): Promise<
   const flags = await expenseFlagMap();
   const txns = await prisma.transaction.findMany({
     where: { userId, direction: 'debit', occurredAt: { gte: start, lt: end } },
-    select: { amount: true, categoryId: true, subcategoryId: true },
+    select: { amount: true, myShare: true, categoryId: true, subcategoryId: true },
   });
 
   const spentByCat = new Map<number, number>();
@@ -194,7 +195,7 @@ export async function getBudgetProgress(userId: number, month: string): Promise<
     if (t.categoryId == null) continue;
     const effId = t.subcategoryId ?? t.categoryId;
     if (!(flags.get(effId) ?? true)) continue; // only real expenses
-    spentByCat.set(t.categoryId, (spentByCat.get(t.categoryId) ?? 0) + Number(t.amount));
+    spentByCat.set(t.categoryId, (spentByCat.get(t.categoryId) ?? 0) + spendAmount(t));
   }
 
   return budgets
@@ -211,14 +212,14 @@ export async function getBudgetProgress(userId: number, month: string): Promise<
 async function spendForRange(userId: number, start: Date, end: Date, flags: Map<number, boolean>): Promise<number> {
   const txns = await prisma.transaction.findMany({
     where: { userId, direction: 'debit', occurredAt: { gte: start, lt: end } },
-    select: { amount: true, categoryId: true, subcategoryId: true },
+    select: { amount: true, myShare: true, categoryId: true, subcategoryId: true },
   });
   let total = 0;
   for (const t of txns) {
     const effId = t.subcategoryId ?? t.categoryId;
     // Uncategorized debits: count as spend (conservative — surfaced for review).
     const isExpense = effId == null ? true : flags.get(effId) ?? true;
-    if (isExpense) total += Number(t.amount);
+    if (isExpense) total += spendAmount(t); // only your share of a split
   }
   return total;
 }
@@ -242,7 +243,10 @@ export async function getTrend(userId: number, endMonth: string, months = 6): Pr
 
   const txns = await prisma.transaction.findMany({
     where: { userId, occurredAt: { gte: start, lt: end } },
-    select: { amount: true, direction: true, occurredAt: true, categoryId: true, subcategoryId: true, isCreditCard: true },
+    select: {
+      amount: true, myShare: true, direction: true, occurredAt: true, categoryId: true, subcategoryId: true, isCreditCard: true,
+      settles: { select: { id: true } },
+    },
   });
 
   // Initialize buckets oldest → newest.
@@ -257,13 +261,13 @@ export async function getTrend(userId: number, endMonth: string, months = 6): Pr
     const key = `${t.occurredAt.getFullYear()}-${String(t.occurredAt.getMonth() + 1).padStart(2, '0')}`;
     const b = buckets.get(key);
     if (!b) continue;
-    const amt = Number(t.amount);
     if (t.direction === 'credit') {
-      if (!t.isCreditCard) b.income += amt;
+      // A flatmate paying back their share isn't income.
+      if (!t.isCreditCard && !isSettlement(t)) b.income += Number(t.amount);
     } else {
       const effId = t.subcategoryId ?? t.categoryId;
       const isExpense = effId == null ? true : flags.get(effId) ?? true;
-      if (isExpense) b.spend += amt;
+      if (isExpense) b.spend += spendAmount(t);
     }
   }
 
@@ -299,7 +303,7 @@ export async function getWeeklyCategorySpend(userId: number, month: string): Pro
 
   const txns = await prisma.transaction.findMany({
     where: { userId, direction: 'debit', occurredAt: { gte: start, lt: end } },
-    select: { amount: true, occurredAt: true, categoryId: true, subcategoryId: true, category: { select: { name: true } } },
+    select: { amount: true, myShare: true, occurredAt: true, categoryId: true, subcategoryId: true, category: { select: { name: true } } },
   });
 
   const buckets = ranges.map(([a, b]) => ({ label: `${a}\u2013${b}`, byCat: new Map<string, number>(), total: 0 }));
@@ -312,7 +316,7 @@ export async function getWeeklyCategorySpend(userId: number, month: string): Pro
 
     const idx = Math.min(ranges.length - 1, Math.floor((t.occurredAt.getDate() - 1) / 7));
     const name = t.category?.name ?? 'Uncategorized';
-    const amt = Number(t.amount);
+    const amt = spendAmount(t);
     const b = buckets[idx];
     b.byCat.set(name, (b.byCat.get(name) ?? 0) + amt);
     b.total += amt;
@@ -346,7 +350,7 @@ export async function getMonthlyOverview(userId: number, month: string): Promise
 
   const txns = await prisma.transaction.findMany({
     where: { userId, occurredAt: { gte: start, lt: end } },
-    include: { category: true },
+    include: { category: true, settles: { select: { id: true } } },
   });
 
   let totalSpend = 0;
@@ -369,7 +373,8 @@ export async function getMonthlyOverview(userId: number, month: string): Promise
       const isTransferIn =
         (t.subcategoryId != null && selfTransferIds.has(t.subcategoryId)) ||
         (t.categoryId != null && selfTransferIds.has(t.categoryId));
-      if (!t.isCreditCard && !isTransferIn) {
+      // A share someone paid back is your own money returning, not income.
+      if (!t.isCreditCard && !isTransferIn && !isSettlement(t)) {
         totalMoneyIn += amt;
         // Income breakdown: by category when set, else by label (e.g. "Salary").
         const src = t.category?.name || t.displayLabel || 'Other income';
@@ -387,15 +392,18 @@ export async function getMonthlyOverview(userId: number, month: string): Promise
     if (t.categoryId == null) uncategorizedCount++;
 
     if (isExpense) {
-      totalSpend += amt;
-      if (t.isCreditCard) creditCardSpend += amt;
+      // Spend is your share of a split; money out above stays the full amount
+      // that actually left the account.
+      const mine = spendAmount(t);
+      totalSpend += mine;
+      if (t.isCreditCard) creditCardSpend += mine;
       const key = t.categoryId;
       const name = t.category?.name ?? 'Uncategorized';
       const cur = catAgg.get(key) ?? { name, amount: 0, isExpense };
-      cur.amount += amt;
+      cur.amount += mine;
       catAgg.set(key, cur);
       const label = t.displayLabel || t.merchant;
-      merchantAgg.set(label, (merchantAgg.get(label) ?? 0) + amt);
+      merchantAgg.set(label, (merchantAgg.get(label) ?? 0) + mine);
     }
   }
 

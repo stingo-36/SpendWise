@@ -29,7 +29,8 @@
     "db:subscription-kind": "prisma db execute --file prisma/sql/2026-10-29-subscription-kind.sql --schema prisma/schema.prisma",
     "db:notes": "prisma db execute --file prisma/sql/2026-10-28-notes.sql --schema prisma/schema.prisma",
     "db:card-statement-day": "prisma db execute --file prisma/sql/2026-10-31-card-statement-day.sql --schema prisma/schema.prisma",
-    "db:month-balances": "prisma db execute --file prisma/sql/2026-11-08-month-balances.sql --schema prisma/schema.prisma"
+    "db:month-balances": "prisma db execute --file prisma/sql/2026-11-08-month-balances.sql --schema prisma/schema.prisma",
+    "db:split-shares": "prisma db execute --file prisma/sql/2026-11-08-split-shares.sql --schema prisma/schema.prisma"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

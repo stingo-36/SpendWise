@@ -39,7 +39,10 @@ export async function getMonthCalendar(userId: number, month: string): Promise<M
     prisma.user.findUnique({ where: { id: userId }, select: { salaryEnabled: true, salaryAmount: true, salaryDay: true } }),
     prisma.transaction.findMany({
       where: { userId, direction: 'credit', isCreditCard: false, occurredAt: { gte: start, lt: end }, category: { isExpense: false } },
-      select: { amount: true, occurredAt: true, merchant: true, displayLabel: true, categoryId: true, subcategoryId: true, category: { select: { name: true } } },
+      select: {
+        amount: true, occurredAt: true, merchant: true, displayLabel: true, categoryId: true, subcategoryId: true,
+        category: { select: { name: true } }, settles: { select: { id: true } },
+      },
     }),
     selfTransferCategoryIds(),
   ]);
@@ -55,6 +58,7 @@ export async function getMonthCalendar(userId: number, month: string): Promise<M
   // Income that arrived: categorised as income, not a transfer between your own accounts.
   for (const c of credits) {
     if (c.category?.name === 'Transfers') continue;
+    if (c.settles) continue; // a share paid back, not income
     if ((c.subcategoryId != null && selfTransferIds.has(c.subcategoryId)) || (c.categoryId != null && selfTransferIds.has(c.categoryId))) continue;
     const d = c.occurredAt;
     events.push({

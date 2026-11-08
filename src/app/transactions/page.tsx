@@ -9,6 +9,8 @@ import Icon from '@/components/Icon';
 import Select, { CategoryDropdown } from '@/components/Select';
 import { categoryStyle } from '@/lib/palette';
 import CategoryTag from '@/components/CategoryTag';
+import SplitEditor, { type Share } from '@/components/SplitEditor';
+import { spendAmount } from '@/lib/splits';
 import { DATA_CHANGED_EVENT } from '@/lib/navLinks';
 
 interface Txn {
@@ -30,6 +32,13 @@ interface Txn {
   llmConfidence: number | null;
   isRecurring: boolean;
   isCreditCard: boolean;
+  /** Your part when the payment is split with others; null = all yours. */
+  myShare: string | null;
+  shares: Share[];
+  /** On a credit: the share it paid back. */
+  settles: { shareId: number; name: string; label: string } | null;
+  /** On a credit: an open share with the same amount it probably pays back. */
+  suggestion: { shareId: number; name: string; label: string; amount: string } | null;
 }
 
 interface DeletedTxn {
@@ -219,6 +228,25 @@ export default function TransactionsPage() {
     if (!res.ok) await load(); // roll back to server truth
   }
 
+  // Suggestions the user waved away this visit — not stored, they come back on reload.
+  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+
+  /** Link a credit to the share it pays back (or unlink with shareId = null). */
+  async function settle(t: Txn, shareId: number | null) {
+    setActionError(null);
+    const res = await fetch(`/api/transactions/${t.id}/settle`, {
+      method: shareId == null ? 'DELETE' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: shareId == null ? undefined : JSON.stringify({ shareId }),
+    });
+    if (!res.ok) {
+      setActionError(await errorFrom(res, shareId == null ? 'Unmatch failed' : 'Match failed'));
+      return;
+    }
+    await load();
+    window.dispatchEvent(new Event(DATA_CHANGED_EVENT));
+  }
+
   // Group by day (API already returns newest-first).
   const groups = useMemo(() => {
     const m = new Map<string, Txn[]>();
@@ -229,10 +257,12 @@ export default function TransactionsPage() {
     }
     return Array.from(m.entries()).map(([key, list]) => {
       // Card charges don't move the account balance — the bill payment does.
+      // A split counts only your share, and a pay-back of someone's share is
+      // already netted out of it, so neither is counted twice.
       let net = 0;
       for (const t of list) {
-        if (t.isCreditCard) continue;
-        net += (t.direction === 'credit' ? 1 : -1) * Number(t.amount);
+        if (t.isCreditCard || t.settles) continue;
+        net += t.direction === 'credit' ? Number(t.amount) : -spendAmount(t);
       }
       return { key, iso: list[0].occurredAt, list, net };
     });
@@ -407,6 +437,16 @@ export default function TransactionsPage() {
                                   <Icon name="check" size={12} /> Bill paid
                                 </span>
                               )}
+                              {t.myShare != null && (
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-[rgb(var(--ink))] px-2 py-0.5 font-semibold text-amber">
+                                  <Icon name="split" size={12} /> Split {t.shares.length + 1} ways
+                                </span>
+                              )}
+                              {t.settles && (
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-[#DCFCE7] px-2 py-0.5 font-semibold text-[#166534]">
+                                  <Icon name="check" size={12} /> {t.settles.name} paid back · {t.settles.label}
+                                </span>
+                              )}
                               {t.isRecurring && (
                                 <span className="inline-flex items-center gap-1 rounded-lg bg-[#EDE9FE] px-2 py-0.5 font-semibold text-[#5B21B6]">
                                   <Icon name="repeat" size={12} /> Recurring
@@ -420,9 +460,16 @@ export default function TransactionsPage() {
                           </div>
 
                           <div className="flex shrink-0 items-center gap-1">
-                            <div className={`text-right text-[15px] font-semibold tabular ${t.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
-                              {t.direction === 'debit' ? '−' : '+'}
-                              {inr(t.amount)}
+                            <div className="text-right">
+                              <div className={`text-[15px] font-semibold tabular ${t.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
+                                {t.direction === 'debit' ? '−' : '+'}
+                                {inr(t.direction === 'debit' ? spendAmount(t) : t.amount)}
+                              </div>
+                              {/* Split: what you show as spend is your share; the
+                                  real bank figure sits underneath. */}
+                              {t.myShare != null && (
+                                <div className="tabular text-[11px] font-medium text-muted">{inr(t.amount)} paid</div>
+                              )}
                             </div>
                             {/* Edit and delete, always visible. */}
                             <div className="ml-1 flex items-center gap-1">
@@ -446,8 +493,72 @@ export default function TransactionsPage() {
                           </div>
                         </div>
 
+                        {/* Who owes what on a split, and whether they've paid. */}
+                        {t.myShare != null && !isEditing && (
+                          <ul className="mb-3 ml-[57px] mr-3 space-y-1.5 border-l-2 border-[rgb(var(--ink))] pl-3 text-[13px]">
+                            <li className="flex items-center gap-2">
+                              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#0891B2] text-[10px] font-bold text-white">Me</span>
+                              <span className="min-w-0 flex-1 truncate">Your share</span>
+                              <span className="tabular font-semibold">{inr(t.myShare)}</span>
+                            </li>
+                            {t.shares.map((s, i) => (
+                              <li key={s.id} className="flex items-center gap-2">
+                                <span
+                                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white"
+                                  style={{ background: ['#7C3AED', '#DB2777', '#F97316', '#16A34A', '#2563EB', '#C026D3', '#EAB308', '#0891B2'][i % 8] }}
+                                >
+                                  {s.name[0]?.toUpperCase()}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate">{s.name} owes you</span>
+                                {s.settledAt ? (
+                                  <span className="chip shrink-0 bg-[#DCFCE7] py-0.5 text-[#166534]">
+                                    <Icon name="check" size={11} /> Paid {new Date(s.settledAt).toLocaleDateString('en-IN', { timeZone: IST, day: 'numeric', month: 'short' })}
+                                  </span>
+                                ) : (
+                                  <span className="chip shrink-0 bg-[#FFEDD5] py-0.5 text-[#9A3412]">Waiting</span>
+                                )}
+                                <span className="tabular w-20 shrink-0 text-right font-semibold">{inr(s.amount)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {/* A pay-back that looks like someone's share: one tap to match it. */}
+                        {t.suggestion && !dismissed.has(t.id) && (
+                          <div className="mb-3 ml-3 mr-3 flex flex-wrap items-center gap-2 rounded-xl border-[1.5px] border-[rgb(var(--ink))] bg-[#ECFCCB] px-3 py-2 text-[13px] sm:ml-[57px]">
+                            <Icon name="link" size={15} className="shrink-0" />
+                            <span className="min-w-0 flex-1">
+                              Looks like <b>{t.suggestion.name}</b>’s share of <b>{t.suggestion.label}</b>. Match it so it isn’t counted as income?
+                            </span>
+                            <button onClick={() => setDismissed((d) => new Set(d).add(t.id))} className="btn-ghost min-h-0 px-2.5 py-1 text-xs">
+                              Not this
+                            </button>
+                            <button onClick={() => settle(t, t.suggestion!.shareId)} className="btn-accent min-h-0 px-3 py-1 text-xs">
+                              Match
+                            </button>
+                          </div>
+                        )}
+
                     {editing === t.id && (
                       <div className="space-y-3 px-3 pb-4 sm:pl-[61px]">
+                        {t.direction === 'debit' && (
+                          <SplitEditor
+                            txnId={t.id}
+                            total={Number(t.amount)}
+                            myShare={t.myShare}
+                            shares={t.shares}
+                            onDone={() => { setEditing(null); load(); window.dispatchEvent(new Event(DATA_CHANGED_EVENT)); }}
+                          />
+                        )}
+                        {t.settles && (
+                          <div className="flex items-center gap-2 rounded-2xl bg-[#DCFCE7] px-3 py-2.5 text-sm text-[#166534]">
+                            <Icon name="link" size={15} className="shrink-0" />
+                            <span className="flex-1">Pays back {t.settles.name}’s share of {t.settles.label} — not counted as income.</span>
+                            <button onClick={() => settle(t, null)} className="btn-ghost min-h-0 px-2.5 py-1 text-xs text-[#166534]">
+                              Unmatch
+                            </button>
+                          </div>
+                        )}
                         <label className="flex items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2.5 text-sm cursor-pointer">
                           <input
                             type="checkbox"

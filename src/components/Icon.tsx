@@ -231,6 +231,14 @@ const paths: Record<string, React.ReactNode> = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  // One path forking in two — a payment split between people.
+  split: <path d="M12 21v-7M12 14 6 6M12 14l6-8M6 6V3M6 6H3M18 6V3M18 6h3" />,
+  link: (
+    <>
+      <path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5" />
+      <path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5" />
+    </>
+  ),
   home: <path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z" />,
   insights: <path d="M5 20v-9M12 20V4M19 20v-7" />,
   more: (
