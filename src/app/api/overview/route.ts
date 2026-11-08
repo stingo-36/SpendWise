@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMonthlyOverview, getWeeklyCategorySpend, currentMonth } from '@/lib/reporting';
 import { requireUser } from '@/lib/session-server';
+import { getMonthBalance } from '@/lib/balance';
 
 export const runtime = 'nodejs';
 
@@ -10,6 +11,10 @@ export async function GET(req: NextRequest) {
 
   const month = req.nextUrl.searchParams.get('month') || currentMonth();
   if (!/^\d{4}-\d{2}$/.test(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 });
-  const [overview, weekly] = await Promise.all([getMonthlyOverview(userId, month), getWeeklyCategorySpend(userId, month)]);
-  return NextResponse.json({ ...overview, weekly });
+  const [overview, weekly, balance] = await Promise.all([
+    getMonthlyOverview(userId, month),
+    getWeeklyCategorySpend(userId, month),
+    getMonthBalance(userId, month),
+  ]);
+  return NextResponse.json({ ...overview, weekly, balance });
 }
