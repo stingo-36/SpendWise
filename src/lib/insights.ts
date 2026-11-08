@@ -6,6 +6,7 @@
  *   - money in = credits to the account that aren't a transfer to yourself;
  *   - saved = money in − debits that left the account.
  */
+import { spendAmount, isSettlement } from './splits';
 import { prisma } from './db';
 import { expenseFlagMap, selfTransferCategoryIds } from './reporting';
 
@@ -47,6 +48,8 @@ export async function getInsights(userId: number, count = 12, now = new Date()):
       where: { userId, occurredAt: { gte: start, lt: end } },
       select: {
         amount: true,
+        myShare: true,
+        settles: { select: { id: true } },
         direction: true,
         occurredAt: true,
         categoryId: true,
@@ -74,20 +77,21 @@ export async function getInsights(userId: number, count = 12, now = new Date()):
     if (t.direction === 'credit') {
       const isTransferIn =
         (t.subcategoryId != null && selfTransferIds.has(t.subcategoryId)) || (t.categoryId != null && selfTransferIds.has(t.categoryId));
-      if (!t.isCreditCard && !isTransferIn) m.moneyIn += amt;
+      if (!t.isCreditCard && !isTransferIn && !isSettlement(t)) m.moneyIn += amt;
       continue;
     }
     if (!t.isCreditCard) m.accountOutflow += amt;
     const effId = t.subcategoryId ?? t.categoryId;
     const isExpense = effId == null ? true : flags.get(effId) ?? true;
     if (!isExpense) continue;
-    m.spend += amt;
+    const mine = spendAmount(t); // your share of a split
+    m.spend += mine;
     const label = t.category ? (t.subcategory ? `${t.category.name} › ${t.subcategory.name}` : t.category.name) : 'Uncategorized';
     const row = catMonth.get(label) ?? new Map<string, number>();
-    row.set(m.month, (row.get(m.month) ?? 0) + amt);
+    row.set(m.month, (row.get(m.month) ?? 0) + mine);
     catMonth.set(label, row);
     const merchant = t.displayLabel || t.merchant;
-    merchants.set(merchant, (merchants.get(merchant) ?? 0) + amt);
+    merchants.set(merchant, (merchants.get(merchant) ?? 0) + mine);
   }
 
   const months = keys.map((k) => {

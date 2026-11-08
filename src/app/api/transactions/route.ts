@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/session-server';
 import { ensureCardBillCategory } from '@/lib/cardBill';
+import { suggestShare, type OpenShare } from '@/lib/splits';
 
 export const runtime = 'nodejs';
 
@@ -126,9 +127,31 @@ export async function GET(req: NextRequest) {
       orderBy: sp.get('reviewQueue') === '1' ? { occurredAt: 'desc' } : { occurredAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      include: { category: true, subcategory: true },
+      include: {
+        category: true,
+        subcategory: true,
+        shares: { orderBy: { id: 'asc' }, include: { settledBy: { select: { occurredAt: true } } } },
+        settles: { include: { transaction: { select: { displayLabel: true, merchant: true } } } },
+      },
     }),
   ]);
+
+  // Open shares (not yet paid back), to suggest a match for incoming credits.
+  const needsSuggestion = items.some((t) => t.direction === 'credit' && !t.settles);
+  const open: OpenShare[] = needsSuggestion
+    ? (
+        await prisma.splitShare.findMany({
+          where: { userId, settledById: null },
+          include: { transaction: { select: { occurredAt: true, displayLabel: true, merchant: true } } },
+        })
+      ).map((s) => ({
+        id: s.id,
+        name: s.name,
+        amount: Number(s.amount),
+        paidAt: s.transaction.occurredAt,
+        label: s.transaction.displayLabel || s.transaction.merchant,
+      }))
+    : [];
 
   return NextResponse.json({
     total,
@@ -154,6 +177,24 @@ export async function GET(req: NextRequest) {
       isRecurring: t.isRecurring,
       isCreditCard: t.isCreditCard,
       notes: t.notes,
+      myShare: t.myShare?.toString() ?? null,
+      shares: t.shares.map((sh) => ({
+        id: sh.id,
+        name: sh.name,
+        amount: sh.amount.toString(),
+        settledAt: sh.settledBy ? sh.settledBy.occurredAt.toISOString() : null,
+      })),
+      settles: t.settles
+        ? { shareId: t.settles.id, name: t.settles.name, label: t.settles.transaction.displayLabel || t.settles.transaction.merchant }
+        : null,
+      suggestion: (() => {
+        if (t.direction !== 'credit' || t.settles) return null;
+        const hit = suggestShare(
+          { amount: Number(t.amount), occurredAt: t.occurredAt, from: `${t.rawMerchant} ${t.displayLabel ?? ''}` },
+          open,
+        ) as (OpenShare & { label: string }) | null;
+        return hit ? { shareId: hit.id, name: hit.name, label: hit.label, amount: String(hit.amount) } : null;
+      })(),
     })),
   });
 }

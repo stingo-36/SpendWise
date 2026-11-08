@@ -91,6 +91,10 @@ model Transaction {
   isCreditCard   Boolean   @default(false) @map("is_credit_card")
   subscriptionId Int?      @map("subscription_id")
   notes          String?
+  /// Set when a debit is split with other people: your own part of `amount`.
+  /// `amount` stays the real bank figure (so sync dedupe still matches it);
+  /// spend reporting uses this instead. NULL = not split, all of it is yours.
+  myShare        Decimal?  @db.Decimal(12, 2) @map("my_share")
   createdAt      DateTime  @default(now()) @map("created_at")
 
   rawEmail     RawEmail?     @relation(fields: [rawEmailId], references: [id])
@@ -98,6 +102,10 @@ model Transaction {
   subcategory  Category?     @relation("TxnSubcategory", fields: [subcategoryId], references: [id])
   subscription Subscription? @relation(fields: [subscriptionId], references: [id])
   noteLinks    NoteTransaction[]
+  /// The other people's parts of this debit, when it is split.
+  shares       SplitShare[]  @relation("SplitOf")
+  /// On a credit: the share it pays back. Such a credit is not income.
+  settles      SplitShare?   @relation("SettledBy")
 
   /// One raw email yields at most one transaction. Postgres treats NULLs as
   /// distinct, so manually-added rows (raw_email_id NULL) are unaffected.
@@ -301,4 +309,26 @@ model NoteTransaction {
   @@id([noteId, transactionId])
   @@index([transactionId])
   @@map("note_transactions")
+}
+
+/// Someone else's part of a debit you paid in full — e.g. a flatmate's share
+/// of the rent. When they pay you back, the incoming credit is linked here
+/// (settledById) and stops counting as income. Deleting the debit drops its
+/// shares; deleting the credit just un-settles the share.
+model SplitShare {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @map("user_id")
+  transactionId Int       @map("transaction_id")
+  name          String
+  amount        Decimal   @db.Decimal(12, 2)
+  settledById   Int?      @unique @map("settled_by_id")
+  settledAt     DateTime? @map("settled_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  transaction Transaction  @relation("SplitOf", fields: [transactionId], references: [id], onDelete: Cascade)
+  settledBy   Transaction? @relation("SettledBy", fields: [settledById], references: [id], onDelete: SetNull)
+
+  @@index([transactionId])
+  @@index([userId, settledById])
+  @@map("split_shares")
 }
