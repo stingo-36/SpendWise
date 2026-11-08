@@ -30,10 +30,10 @@ function monthlyOf(s: Sub): number {
 
 /** Each status gets a ground, a label colour and a glyph — not just grey text. */
 const STATUS: Record<string, { soft: string; ink: string; solid: string; icon: string; label: string }> = {
-  active: { soft: '#E4EDFB', ink: '#164C9E', solid: '#1D5FC4', icon: 'check', label: 'Active' },
-  price_changed: { soft: '#FBEBDD', ink: '#8A3109', solid: '#E8833A', icon: 'alert', label: 'Price up' },
-  stopped: { soft: '#EEF0F3', ink: '#4A515C', solid: '#5B6270', icon: 'close', label: 'Stopped' },
-  dismissed: { soft: '#EEF0F3', ink: '#4A515C', solid: '#8A919C', icon: 'close', label: 'Removed' },
+  active: { soft: '#DBEAFE', ink: '#1E40AF', solid: '#2563EB', icon: 'check', label: 'Active' },
+  price_changed: { soft: '#FFEDD5', ink: '#9A3412', solid: '#F97316', icon: 'alert', label: 'Price up' },
+  stopped: { soft: '#FEE2E2', ink: '#991B1B', solid: '#EF4444', icon: 'close', label: 'Stopped' },
+  dismissed: { soft: '#FCE7F3', ink: '#9D174D', solid: '#DB2777', icon: 'close', label: 'Removed' },
 };
 
 function statusOf(s: string) {

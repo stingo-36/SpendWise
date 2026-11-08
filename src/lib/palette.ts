@@ -3,18 +3,18 @@
 // Generic index-keyed fallback for charts without a category name. Ordered so
 // that consecutive entries are far apart in hue, never adjacent shades.
 export const PALETTE = [
-  '#D2534B', // red
-  '#3D7FC1', // blue
-  '#E0813C', // orange
-  '#3F9A5F', // green
-  '#6E5BC6', // indigo
-  '#C9A22B', // gold
-  '#2E8FA8', // teal
-  '#B0559C', // magenta
-  '#CC5F86', // pink
-  '#7A808A', // slate
-  '#8FBF4D', // lime
-  '#C97B63', // clay
+  '#EF4444', // red
+  '#2563EB', // blue
+  '#F97316', // orange
+  '#16A34A', // green
+  '#7C3AED', // violet
+  '#EAB308', // gold
+  '#0891B2', // cyan
+  '#C026D3', // fuchsia
+  '#DB2777', // pink
+  '#0EA5E9', // sky
+  '#65A30D', // lime
+  '#EA580C', // deep orange
 ];
 
 export const INK = '#0D1014';
@@ -22,7 +22,7 @@ export const AMBER = '#CBF24A';
 export const PERI = '#1D5FC4';
 export const CREDIT = '#1D5FC4';
 export const DEBIT = '#B4400C';
-export const MUTED = '#5B6270';
+export const MUTED = '#2B3140';
 
 /* ───────────────────────────────────────────────────────────────────────────
    Category identity — one colour and one icon per category, keyed by NAME.
@@ -55,35 +55,36 @@ export interface CategoryStyle {
  * appear together must sit far apart on the wheel, not merely be distinct.
  */
 const EXPENSE_HUES: Record<string, { solid: string; icon: string }> = {
-  emi: { solid: '#D2534B', icon: 'emi' }, //        ~4°   red
-  food: { solid: '#E0813C', icon: 'food' }, //     ~28°   orange
-  bills: { solid: '#C9A22B', icon: 'bills' }, //   ~46°   gold
-  sip: { solid: '#3F9A5F', icon: 'sip' }, //      ~140°   green
-  house: { solid: '#2E8FA8', icon: 'house' }, //  ~192°   teal
-  transport: { solid: '#3D7FC1', icon: 'transport' }, // ~210° blue
-  shopping: { solid: '#6E5BC6', icon: 'shopping' }, //   ~250° indigo
-  leisure: { solid: '#B0559C', icon: 'shopping' }, //    ~310° magenta
-  health: { solid: '#CC5F86', icon: 'health' }, // ~340°  pink
-  other: { solid: '#6D7484', icon: 'other' }, //          neutral
-  uncategorized: { solid: '#8A909C', icon: 'other' },
+  emi: { solid: '#EF4444', icon: 'emi' }, //        ~0°   red
+  food: { solid: '#F97316', icon: 'food' }, //     ~25°   orange
+  bills: { solid: '#EAB308', icon: 'bills' }, //   ~45°   gold
+  sip: { solid: '#16A34A', icon: 'sip' }, //      ~142°   green
+  house: { solid: '#0891B2', icon: 'house' }, //  ~192°   cyan
+  transport: { solid: '#2563EB', icon: 'transport' }, // ~221° blue
+  shopping: { solid: '#7C3AED', icon: 'shopping' }, //   ~262° violet
+  leisure: { solid: '#C026D3', icon: 'shopping' }, //    ~292° fuchsia
+  health: { solid: '#DB2777', icon: 'health' }, // ~333°  pink
+  // No grey: the catch-alls get colours of their own.
+  other: { solid: '#65A30D', icon: 'other' }, //        ~85°   lime
+  uncategorized: { solid: '#0D1014', icon: 'other' }, //       ink
 };
 
 /** Income side: deliberately a different family (greens/teals/violets) so an
  *  income slice can never be mistaken for the expense slice in the same seat. */
 const INCOME_HUES: Record<string, { solid: string; icon: string }> = {
-  salary: { solid: '#1F8A70', icon: 'salary' },
-  bonus: { solid: '#4FA36B', icon: 'bonus' },
-  extra: { solid: '#2E9BA8', icon: 'extra' },
-  refund: { solid: '#5E8FD0', icon: 'refund' },
-  interest: { solid: '#7A6FD0', icon: 'sip' },
-  transfers: { solid: '#6E7BC6', icon: 'transfers' },
+  salary: { solid: '#059669', icon: 'salary' },
+  bonus: { solid: '#16A34A', icon: 'bonus' },
+  extra: { solid: '#0891B2', icon: 'extra' },
+  refund: { solid: '#2563EB', icon: 'refund' },
+  interest: { solid: '#7C3AED', icon: 'sip' },
+  transfers: { solid: '#4F46E5', icon: 'transfers' },
 };
 
 /** Fallbacks, so an unseeded or user-added category still gets a stable look. */
 // Spans the whole wheel too, so a user-added category (Leisure was one) can't
 // land in the warm quadrant just because the fallback pool was warm.
-const EXPENSE_FALLBACK = ['#B0559C', '#3F9A5F', '#3D7FC1', '#E0813C', '#6E5BC6', '#C9A22B', '#2E8FA8', '#CC5F86'];
-const INCOME_FALLBACK = ['#2A8A69', '#2E9BA8', '#4FA36B', '#5E8FD0', '#7A6FD0', '#3F9D8C'];
+const EXPENSE_FALLBACK = ['#C026D3', '#16A34A', '#2563EB', '#F97316', '#7C3AED', '#EAB308', '#0891B2', '#DB2777'];
+const INCOME_FALLBACK = ['#059669', '#0891B2', '#16A34A', '#2563EB', '#7C3AED', '#0D9488'];
 
 function hash(s: string): number {
   let h = 0;
@@ -134,7 +135,9 @@ export function categoryStyle(name: string | null | undefined, isExpense = true)
     solid = pool[hash(key) % pool.length];
     icon = isExpense ? 'other' : 'salary';
   }
-  return { solid, soft: tint(solid, 0.88), ink: shade(solid, 0.28), icon };
+  // A clearly coloured wash with deep same-hue text — the old 88% tint read
+  // as pale-on-pale and dull.
+  return { solid, soft: tint(solid, 0.8), ink: shade(solid, 0.45), icon };
 }
 
 /** Convenience for charts, which only need the fill. */

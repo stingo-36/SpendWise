@@ -206,7 +206,7 @@ export default function AddSubscription({
           ) : (
             <ul className="space-y-1.5">
               {shown.map((c) => {
-                const tone = CADENCE_TONE[c.cadence] ?? '#7A808A';
+                const tone = CADENCE_TONE[c.cadence] ?? '#0D1014';
                 return (
                   <li
                     key={c.merchant}

@@ -21,7 +21,7 @@ export default function CategoryTag({
 }) {
   if (!category) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#E8833A]/60 px-2 py-0.5 text-xs font-semibold text-[#8A3109]">
+      <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#FFEDD5] px-2 py-0.5 text-xs font-semibold text-[#9A3412]">
         Needs category
       </span>
     );

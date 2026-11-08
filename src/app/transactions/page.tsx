@@ -271,7 +271,7 @@ export default function TransactionsPage() {
           >
             Deleted
             {deleted.length > 0 && (
-              <span className="rounded-full bg-surface-2 px-1.5 text-xs font-bold text-muted">{deleted.length}</span>
+              <span className="rounded-full bg-[#EF4444] px-1.5 text-xs font-bold text-white">{deleted.length}</span>
             )}
           </button>
           <button onClick={() => setAdding(true)} className="btn-primary flex-1 px-4 py-2 sm:flex-none">
@@ -386,8 +386,8 @@ export default function TransactionsPage() {
                       <li key={t.id} data-animate className={`group -mx-3 rounded-2xl transition-colors ${isEditing ? 'bg-surface-2' : 'hover:bg-surface-2/70'}`}>
                         <div className="flex items-center gap-3.5 px-3 py-3">
                           <span
-                            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
-                            style={{ background: t.categoryId ? st.soft : 'rgb(var(--surface-2))', color: t.categoryId ? st.ink : 'rgb(var(--muted))' }}
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-white"
+                            style={{ background: t.categoryId ? st.solid : 'rgb(var(--ink))' }}
                           >
                             <Icon name={t.categoryId ? st.icon : 'other'} size={19} />
                           </span>
@@ -403,12 +403,12 @@ export default function TransactionsPage() {
                                 </span>
                               )}
                               {!t.isCreditCard && t.direction === 'debit' && t.subcategoryName === 'Credit card bill' && (
-                                <span className="inline-flex items-center gap-1 rounded-lg bg-sky px-2 py-0.5 font-semibold text-[rgb(var(--peri-2))]">
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-[#DBEAFE] px-2 py-0.5 font-semibold text-[#1E40AF]">
                                   <Icon name="check" size={12} /> Bill paid
                                 </span>
                               )}
                               {t.isRecurring && (
-                                <span className="inline-flex items-center gap-1 rounded-lg bg-surface-2 px-2 py-0.5 font-semibold">
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-[#EDE9FE] px-2 py-0.5 font-semibold text-[#5B21B6]">
                                   <Icon name="repeat" size={12} /> Recurring
                                 </span>
                               )}
@@ -428,7 +428,7 @@ export default function TransactionsPage() {
                             <div className="ml-1 flex items-center gap-1">
                               <button
                                 onClick={() => setEditing(isEditing ? null : t.id)}
-                                className={`grid h-8 w-8 place-items-center rounded-lg transition-colors ${isEditing ? 'bg-[rgb(var(--ink))] text-white' : 'bg-surface-2 text-text hover:bg-[rgb(var(--border))]'}`}
+                                className={`grid h-8 w-8 place-items-center rounded-lg text-white transition-colors ${isEditing ? 'bg-[rgb(var(--ink))]' : 'bg-[#2563EB] hover:bg-[#1D4ED8]'}`}
                                 aria-label={isEditing ? `Close editor for ${t.label}` : `Edit ${t.label}`}
                                 title={isEditing ? 'Close' : 'Edit'}
                               >
@@ -436,7 +436,7 @@ export default function TransactionsPage() {
                               </button>
                               <button
                                 onClick={() => remove(t)}
-                                className="grid h-8 w-8 place-items-center rounded-lg bg-[#FBE3D3] text-[#9A3412] transition-colors hover:bg-debit hover:text-white"
+                                className="grid h-8 w-8 place-items-center rounded-lg bg-[#EF4444] text-white transition-colors hover:bg-[#DC2626]"
                                 aria-label={`Delete ${t.label}`}
                                 title="Delete"
                               >
@@ -502,7 +502,7 @@ export default function TransactionsPage() {
           <Icon name="chevron" size={15} className={`text-muted transition-transform duration-200 ${showDeleted ? 'rotate-90' : ''}`} />
           Deleted transactions
           {deleted.length > 0 && (
-            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-bold text-muted">{deleted.length}</span>
+            <span className="rounded-full bg-[#EF4444] px-2 py-0.5 text-xs font-bold text-white">{deleted.length}</span>
           )}
           <span className="ml-auto text-xs font-normal text-muted">
             {showDeleted ? 'Hide' : 'Show'}
