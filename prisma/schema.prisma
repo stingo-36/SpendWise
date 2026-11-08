@@ -38,7 +38,8 @@ model User {
   kaizenConnectedAt DateTime? @map("pulse_connected_at")
   kaizenLastSeenAt  DateTime? @map("pulse_last_seen_at")
 
-  notes Note[]
+  notes         Note[]
+  monthBalances MonthBalance[]
 
   @@map("users")
 }
@@ -301,4 +302,20 @@ model NoteTransaction {
   @@id([noteId, transactionId])
   @@index([transactionId])
   @@map("note_transactions")
+}
+
+/// A month's opening balance that you set yourself. Without a row, a month
+/// opens with the previous month's closing balance (carried forward), and the
+/// first month with data opens at 0 — see lib/balance.ts.
+model MonthBalance {
+  userId    Int      @map("user_id")
+  /// "YYYY-MM"
+  month     String
+  opening   Decimal  @db.Decimal(12, 2)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, month])
+  @@map("month_balances")
 }
