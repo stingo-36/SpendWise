@@ -24,7 +24,7 @@ function WeekTooltip({ active, payload, label, colors }: any) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s: number, p: any) => s + Number(p.value), 0);
   return (
-    <div className="rounded-2xl bg-[rgb(var(--ink))] px-3.5 py-3 text-xs text-white shadow-[0_18px_40px_-20px_rgb(26_28_31/0.7)]">
+    <div className="rounded-2xl bg-[rgb(var(--ink))] px-3.5 py-3 text-xs text-white">
       <div className="mb-1.5 font-semibold text-white/60">{label}</div>
       <div className="space-y-1">
         {rows.map((p: any) => (

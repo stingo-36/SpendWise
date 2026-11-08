@@ -53,7 +53,7 @@ function Popover({
       {field({ open, toggle: () => setOpen((v) => !v) })}
       {open && (
         <div
-          className={`animate-pop absolute z-40 max-h-[22rem] overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-[0_24px_60px_-24px_rgb(26_28_31/0.45)] ${width} ${
+          className={`animate-pop absolute z-40 max-h-[22rem] overflow-y-auto rounded-2xl border-[1.5px] border-[rgb(var(--ink))] bg-surface p-1.5 ${width} ${
             align === 'right' ? 'right-0' : 'left-0'
           } ${dropUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'}`}
         >
@@ -87,7 +87,7 @@ function Field({
       {icon && (
         <span
           className="tile h-6 w-6 shrink-0 rounded-lg"
-          style={tone ? { background: tone, color: '#fff' } : { background: 'rgb(var(--surface-2))', color: 'rgb(var(--muted))' }}
+          style={tone ? { background: tone, color: '#fff' } : { background: 'rgb(var(--ink))', color: '#fff' }}
         >
           <Icon name={icon} size={12} />
         </span>
@@ -168,7 +168,7 @@ export default function Select({
               {o.icon && (
                 <span
                   className="tile h-6 w-6 shrink-0 rounded-lg"
-                  style={o.tone ? { background: o.tone, color: '#fff' } : { background: 'rgb(var(--surface-2))', color: 'rgb(var(--muted))' }}
+                  style={o.tone ? { background: o.tone, color: '#fff' } : { background: 'rgb(var(--ink))', color: '#fff' }}
                 >
                   <Icon name={o.icon} size={12} />
                 </span>

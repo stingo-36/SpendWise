@@ -39,10 +39,20 @@ const config: Config = {
       borderRadius: {
         '4xl': '1.75rem',
       },
-      boxShadow: {
-        card: 'none',
-        ink: '0 18px 40px -24px rgb(13 16 20 / 0.5)',
-      },
+    },
+    // No drop shadows anywhere: every shadow utility renders flat. Focus rings
+    // are separate (ring-*) and still work.
+    boxShadow: {
+      DEFAULT: 'none',
+      sm: 'none',
+      md: 'none',
+      lg: 'none',
+      xl: 'none',
+      '2xl': 'none',
+      inner: 'none',
+      card: 'none',
+      ink: 'none',
+      none: 'none',
     },
   },
   plugins: [],
