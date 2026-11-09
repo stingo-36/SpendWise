@@ -2,6 +2,7 @@
 
 import Icon from './Icon';
 import { categoryStyle } from '@/lib/palette';
+import { categoryIcon } from '@/lib/categoryIcons';
 
 /**
  * Compact, flat category label for dense lists: a tinted tag with a colour
@@ -13,9 +14,13 @@ export default function CategoryTag({
   subcategory,
   isExpense = true,
   locked = false,
+  categoryIcon: catPick,
+  subcategoryIcon: subPick,
 }: {
   category: string | null;
   subcategory?: string | null;
+  categoryIcon?: string | null;
+  subcategoryIcon?: string | null;
   isExpense?: boolean;
   locked?: boolean;
 }) {
@@ -29,7 +34,13 @@ export default function CategoryTag({
   const st = categoryStyle(category, isExpense);
   return (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg px-2 py-0.5 text-xs font-semibold" style={{ background: st.soft, color: st.ink }}>
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: st.solid }} />
+      <Icon
+        name={categoryIcon({ categoryName: category, categoryIcon: catPick, subcategoryName: subcategory, subcategoryIcon: subPick, isExpense })}
+        size={12}
+        strokeWidth={2.2}
+        className="shrink-0"
+        style={{ color: st.solid }}
+      />
       <span className="truncate">
         {category}
         {subcategory && <span className="font-medium"> › {subcategory}</span>}

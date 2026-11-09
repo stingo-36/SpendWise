@@ -6,9 +6,9 @@ import Icon from '@/components/Icon';
 import Select, { CategoryDropdown, type CategoryValue } from '@/components/Select';
 import { useCategories } from '@/lib/useCategories';
 import Reveal from '@/components/Reveal';
-import { categoryStyle } from '@/lib/palette';
 import { DEFAULT_STATEMENT_DAY, MAX_STATEMENT_DAY, recentCycles } from '@/lib/billingCycle';
 import AddTransaction from '@/components/AddTransaction';
+import CategoryTile from '@/components/CategoryTile';
 
 interface LastBill {
   label: string;
@@ -37,8 +37,10 @@ interface Txn {
   accountLast4: string | null;
   categoryId: number | null;
   categoryName: string | null;
+  categoryIcon?: string | null;
   subcategoryId: number | null;
   subcategoryName: string | null;
+  subcategoryIcon?: string | null;
 }
 
 const ordinal = (n: number) => `${n}${[11, 12, 13].includes(n % 100) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
@@ -398,9 +400,14 @@ export default function CreditCardPage() {
             <ul className="divide-y divide-border">
               {shown.map((t) => (
                 <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm">
-                  <span className="tile h-9 w-9 shrink-0 rounded-xl text-white" style={{ background: categoryStyle(t.categoryName, t.direction === 'debit').solid }}>
-                    <Icon name={categoryStyle(t.categoryName, t.direction === 'debit').icon} size={16} />
-                  </span>
+                  <CategoryTile
+                    categoryName={t.categoryName}
+                    categoryIcon={t.categoryIcon}
+                    subcategoryName={t.subcategoryName}
+                    subcategoryIcon={t.subcategoryIcon}
+                    isExpense={t.direction === 'debit'}
+                    size={40}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="truncate font-bold">{t.label}</div>
                     <div className="text-xs font-medium text-muted">

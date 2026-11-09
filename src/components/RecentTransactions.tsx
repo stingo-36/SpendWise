@@ -1,10 +1,9 @@
 'use client';
 
+import CategoryTile from './CategoryTile';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { inr, fmtDate } from '@/lib/format';
-import Icon from './Icon';
-import { categoryStyle } from '@/lib/palette';
 
 interface Txn {
   id: number;
@@ -14,6 +13,9 @@ interface Txn {
   merchant: string;
   label: string;
   categoryName: string | null;
+  categoryIcon?: string | null;
+  subcategoryName?: string | null;
+  subcategoryIcon?: string | null;
 }
 
 /** Last day of a YYYY-MM month, as YYYY-MM-DD. */
@@ -54,21 +56,20 @@ export default function RecentTransactions({ month }: { month: string }) {
       ) : (
         <ul className="divide-y divide-border">
           {items.map((t) => {
-            // The category's own glyph and colour, matching the transactions
-            // list and the charts.
-            const st = categoryStyle(t.categoryName, t.direction === 'debit');
             return (
               <li key={t.id} className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-surface-2/50">
-                <span
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
-                  style={{ background: t.categoryName ? st.soft : 'rgb(var(--surface-2))', color: t.categoryName ? st.ink : 'rgb(var(--muted))' }}
-                >
-                  <Icon name={t.categoryName ? st.icon : 'other'} size={17} />
-                </span>
+                <CategoryTile
+                  categoryName={t.categoryName}
+                  categoryIcon={t.categoryIcon}
+                  subcategoryName={t.subcategoryName}
+                  subcategoryIcon={t.subcategoryIcon}
+                  isExpense={t.direction === 'debit'}
+                  size={38}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{t.label}</div>
                   <div className="mt-0.5 truncate text-xs text-muted">
-                    {fmtDate(t.occurredAt)} · {t.categoryName ?? 'Needs category'}
+                    {fmtDate(t.occurredAt)} · {t.categoryName ? `${t.categoryName}${t.subcategoryName ? ` › ${t.subcategoryName}` : ''}` : 'Needs category'}
                   </div>
                 </div>
                 <div className={`shrink-0 text-sm font-semibold tabular ${t.direction === 'debit' ? 'text-debit' : 'text-credit'}`}>
